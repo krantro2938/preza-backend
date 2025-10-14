@@ -1,0 +1,26 @@
+{
+  "id": "romantic",
+  "slides": [
+    {
+      "id": "welcome",
+      "fields": {
+        "title": {
+          "value": "The new worlds"
+        },
+        "points": {
+          "value": [
+            {
+              "point_value": "value"
+            },
+            {
+              "point_value": "value"
+            },
+            {
+              "point_value": "value"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
