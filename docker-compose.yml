@@ -9,7 +9,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
 
   pgadmin:
@@ -23,5 +23,14 @@ services:
     depends_on:
       - postgres
 
-volumes:
-  postgres_data:
+  fastapi:
+    build: .
+    container_name: perio-fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/mydb
+    depends_on:
+      - postgres
+    volumes:
+      - ./app:/app/app
