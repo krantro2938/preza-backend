@@ -11,6 +11,23 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d mydb"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  fastapi:
+    build: .
+    container_name: perio-fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/mydb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
 
   pgadmin:
     image: dpage/pgadmin4
@@ -22,18 +39,6 @@ services:
       - "8080:80"
     depends_on:
       - postgres
-
-  fastapi:
-    build: .
-    container_name: perio-fastapi
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://admin:secret@postgres:5432/mydb
-    depends_on:
-      - postgres
-    volumes:
-      - ./app:/app/app
 
 volumes:
   postgres_data:
