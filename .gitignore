@@ -1,0 +1,11 @@
+# Docker
+postgres_data/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
