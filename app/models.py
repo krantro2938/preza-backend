@@ -6,6 +6,7 @@ class PresentationTemplate(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(256))
+    preview_url = Column(String(512))
     slides = Column(JSON, nullable=False)
 
 class Presentation(Base):
