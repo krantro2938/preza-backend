@@ -1,30 +1,168 @@
 {
-  "id": "disney",
-  "title": "disney",
+  "id": "disney_presentation",
+  "title": "The Walt Disney Company: Overview and Insights",
   "slides": [
     {
-      "id": "welcome",
+      "id": "title_slide",
+      "title": "Title Slide",
       "fields": [
         {
           "id": "title",
-          "type": "string"
+          "type": "string",
+          "value": "The Walt Disney Company: Overview and Insights"
         },
         {
-          "id": "points",
+          "id": "subtitle",
+          "type": "string",
+          "value": "Exploring Disney's History, Impact, and Future"
+        },
+        {
+          "id": "presenter",
+          "type": "string",
+          "value": "Handro"
+        },
+        {
+          "id": "date",
+          "type": "string",
+          "value": "October 16, 2025"
+        }
+      ]
+    },
+    {
+      "id": "agenda_slide",
+      "title": "Agenda",
+      "fields": [
+        {
+          "id": "agenda_items",
           "type": "array",
-          "description": "Random points",
           "value": [
-            {
-              "id": "point_value",
-              "type": "string"
-            }
+            { "id": "item1", "type": "string", "value": "Introduction to Disney" },
+            { "id": "item2", "type": "string", "value": "Key Milestones" },
+            { "id": "item3", "type": "string", "value": "Business Segments" },
+            { "id": "item4", "type": "string", "value": "Financial Highlights" },
+            { "id": "item5", "type": "string", "value": "Case Study: Disney+" },
+            { "id": "item6", "type": "string", "value": "Conclusion and Q&A" }
           ]
         }
       ]
     },
     {
-      "id": "points_slide",
-      "fields": []
+      "id": "introduction_slide",
+      "title": "Introduction to Disney",
+      "fields": [
+        {
+          "id": "introduction_text",
+          "type": "string",
+          "value": "Founded in 1923, The Walt Disney Company is a global leader in entertainment, with a portfolio including media networks, parks, experiences, and products."
+        },
+        {
+          "id": "key_facts",
+          "type": "array",
+          "value": [
+            { "id": "fact1", "type": "string", "value": "Headquarters: Burbank, California" },
+            { "id": "fact2", "type": "string", "value": "Founder: Walt Disney" },
+            { "id": "fact3", "type": "string", "value": "Revenue (2024): $95 billion" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "milestones_slide",
+      "title": "Key Milestones",
+      "fields": [
+        {
+          "id": "milestones",
+          "type": "array",
+          "value": [
+            { "id": "milestone1", "type": "string", "value": "1928: Release of 'Steamboat Willie' (Mickey Mouse debut)" },
+            { "id": "milestone2", "type": "string", "value": "1955: Opening of Disneyland" },
+            { "id": "milestone3", "type": "string", "value": "1983: Launch of Disney Channel" },
+            { "id": "milestone4", "type": "string", "value": "2019: Launch of Disney+" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "business_segments_slide",
+      "title": "Business Segments",
+      "fields": [
+        {
+          "id": "segments",
+          "type": "array",
+          "value": [
+            { "id": "segment1", "type": "string", "value": "Media Networks (ESPN, ABC, Disney Channels)" },
+            { "id": "segment2", "type": "string", "value": "Parks, Experiences and Products" },
+            { "id": "segment3", "type": "string", "value": "Studio Entertainment (Marvel, Pixar, Lucasfilm)" },
+            { "id": "segment4", "type": "string", "value": "Direct-to-Consumer & International (Disney+, Hulu)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "financial_highlights_slide",
+      "title": "Financial Highlights",
+      "fields": [
+        {
+          "id": "financial_data",
+          "type": "array",
+          "value": [
+            { "id": "data1", "type": "string", "value": "Revenue (2024): $95 billion" },
+            { "id": "data2", "type": "string", "value": "Net Income (2024): $8.2 billion" },
+            { "id": "data3", "type": "string", "value": "Disney+ Subscribers (2025): 200 million" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case_study_slide",
+      "title": "Case Study: Disney+",
+      "fields": [
+        {
+          "id": "case_study_text",
+          "type": "string",
+          "value": "Disney+ launched in 2019 and has grown rapidly, becoming a major player in the streaming industry. Its success is driven by exclusive content, strategic partnerships, and global expansion."
+        },
+        {
+          "id": "key_metrics",
+          "type": "array",
+          "value": [
+            { "id": "metric1", "type": "string", "value": "Subscribers: 200 million (2025)" },
+            { "id": "metric2", "type": "string", "value": "Content Library: 10,000+ titles" },
+            { "id": "metric3", "type": "string", "value": "Revenue (2024): $12 billion" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "conclusion_slide",
+      "title": "Conclusion",
+      "fields": [
+        {
+          "id": "conclusion_text",
+          "type": "string",
+          "value": "The Walt Disney Company continues to innovate and expand, leveraging its iconic brands and diverse business segments to remain a leader in global entertainment."
+        },
+        {
+          "id": "takeaways",
+          "type": "array",
+          "value": [
+            { "id": "takeaway1", "type": "string", "value": "Disney's diversified portfolio ensures resilience." },
+            { "id": "takeaway2", "type": "string", "value": "Streaming (Disney+) is a key growth driver." },
+            { "id": "takeaway3", "type": "string", "value": "Innovation and storytelling remain core strengths." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "qna_slide",
+      "title": "Q&A",
+      "fields": [
+        {
+          "id": "qna_text",
+          "type": "string",
+          "value": "Thank you for your attention! Any questions?"
+        }
+      ]
     }
   ]
 }
