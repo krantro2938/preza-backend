@@ -1,0 +1,22 @@
+topic: "The new worlds"
+
+slide_template:
+{
+  "id": "disney",
+  "title": "disney",
+  "slides": [
+    {
+      "id": "welcome",
+      "fields": [
+        { "id": "title", "type": "string" },
+        {
+          "id": "points",
+          "type": "array",
+          "description": "Random points",
+          "value": [ { "id": "point_value", "type": "string" } ]
+        }
+      ]
+    },
+    { "id": "points_slide", "fields": [] }
+  ]
+}
