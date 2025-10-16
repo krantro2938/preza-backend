@@ -1,8 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .. import models, schemas, database
+import httpx
+import os
+import json
 
 router = APIRouter()
+
+def read_system_prompt():
+    with open("prompts/system.txt", "r", encoding="utf-8") as f:
+        return f.read().strip()
 
 @router.post("/templates/", response_model=schemas.PresentationTemplate)
 def create_template(template: schemas.PresentationTemplateCreate, db: Session = Depends(database.get_db)):
@@ -27,3 +34,73 @@ def create_presentation(presentation: schemas.PresentationCreate, db: Session = 
 @router.get("/presentations/", response_model=list[schemas.Presentation])
 def read_presentations(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     return db.query(models.Presentation).offset(skip).limit(limit).all()
+
+@router.post("/generate", response_model=schemas.GenerateResponse)
+async def generate_presentation(
+    request: schemas.GenerateRequest,
+    db: Session = Depends(database.get_db)
+):
+
+    template = db.query(models.PresentationTemplate).filter(
+        models.PresentationTemplate.id == request.template_id
+    ).first()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    system_prompt = read_system_prompt()
+
+    user_prompt = f"""
+        Название: {request.title}
+        Описание: {request.description}
+        Шаблон слайдов: {json.dumps(template.slides, ensure_ascii=False)}
+            """.strip()
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    model = os.getenv("OPENROUTER_MODEL", "mistralai/mixtral-8x7b-instruct")
+
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY not set")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "http://localhost:8000",
+        "X-Title": "Perio Backend",
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.7
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            raw_content = data["choices"][0]["message"]["content"].strip()
+
+            if raw_content.startswith("```"):
+                raw_content = raw_content.split("```", 2)[1]
+                if raw_content.startswith("json"):
+                    raw_content = raw_content[4:].strip()
+
+            presentation_data = json.loads(raw_content)
+
+            return {"presentation": presentation_data}
+
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"OpenRouter error: {e.response.text}")
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=502, detail="Invalid JSON from model")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
