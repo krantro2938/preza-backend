@@ -103,7 +103,7 @@ async def generate_presentation(
                 title=request.title,
                 description=request.description,
                 presentation=presentation_data,
-                generating=False,
+                generating=True,
                 slides_count=slides_count,
                 presentation_template_id=request.template_id,
                 presentation_url=None
