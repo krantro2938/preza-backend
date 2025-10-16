@@ -37,6 +37,3 @@ class GenerateRequest(BaseModel):
     title: str
     description: str
     template_id: int
-
-class GenerateResponse(BaseModel):
-    presentation: dict
