@@ -4,12 +4,17 @@ from .. import models, schemas, database
 import httpx
 import os
 import json
+import secrets
 
 router = APIRouter()
 
 def read_system_prompt():
     with open("prompts/system.txt", "r", encoding="utf-8") as f:
         return f.read().strip()
+    
+def generate_presentation_uid():
+    token = secrets.token_urlsafe(8)
+    return f"pres_{token}"
 
 @router.post("/templates/", response_model=schemas.PresentationTemplate)
 def create_template(template: schemas.PresentationTemplateCreate, db: Session = Depends(database.get_db)):
