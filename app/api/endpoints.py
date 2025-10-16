@@ -35,7 +35,7 @@ def create_presentation(presentation: schemas.PresentationCreate, db: Session = 
 def read_presentations(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     return db.query(models.Presentation).offset(skip).limit(limit).all()
 
-@router.post("/generate", response_model=schemas.GenerateResponse)
+@router.post("/generate", response_model=schemas.Presentation)
 async def generate_presentation(
     request: schemas.GenerateRequest,
     db: Session = Depends(database.get_db)
@@ -88,19 +88,36 @@ async def generate_presentation(
             data = response.json()
 
             raw_content = data["choices"][0]["message"]["content"].strip()
-
             if raw_content.startswith("```"):
-                raw_content = raw_content.split("```", 2)[1]
-                if raw_content.startswith("json"):
-                    raw_content = raw_content[4:].strip()
+                parts = raw_content.split("```", 2)
+                if len(parts) >= 2:
+                    raw_content = parts[1]
+                    if raw_content.startswith("json"):
+                        raw_content = raw_content[4:].strip()
 
             presentation_data = json.loads(raw_content)
 
-            return {"presentation": presentation_data}
+            slides_count = len(presentation_data.get("slides", []))
+
+            db_presentation = models.Presentation(
+                title=request.title,
+                description=request.description,
+                presentation=presentation_data,
+                generating=False,
+                slides_count=slides_count,
+                presentation_template_id=request.template_id,
+                presentation_url=None
+            )
+            db.add(db_presentation)
+            db.commit()
+            db.refresh(db_presentation)
+
+            return db_presentation
 
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=502, detail=f"OpenRouter error: {e.response.text}")
         except json.JSONDecodeError:
             raise HTTPException(status_code=502, detail="Invalid JSON from model")
         except Exception as e:
+            db.rollback()
             raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
