@@ -1,24 +1,149 @@
 {
-  "id": "disney",
+  "id": "disney_presentation",
+  "title": "The Walt Disney Company: Overview and Insights",
   "slides": [
     {
-      "id": "welcome",
+      "id": "title_slide",
+      "title": "Title Slide",
       "fields": {
         "title": {
-          "value": "The new worlds"
+          "value": "The Walt Disney Company: A Century of Magic and Innovation"
         },
-        "points": {
+        "subtitle": {
+          "value": "Exploring Disney's History, Business, and Future"
+        },
+        "presenter": {
+          "value": "Handro"
+        },
+        "date": {
+          "value": "October 16, 2025"
+        }
+      }
+    },
+    {
+      "id": "agenda_slide",
+      "title": "Agenda",
+      "fields": {
+        "agenda_items": {
           "value": [
-            {
-              "point_value": "value"
-            },
-            {
-              "point_value": "value"
-            },
-            {
-              "point_value": "value"
-            }
+            { "item1": "Introduction to The Walt Disney Company" },
+            { "item2": "Key Milestones in Disney's History" },
+            { "item3": "Disney's Business Segments and Revenue Streams" },
+            { "item4": "Financial Highlights and Market Performance" },
+            { "item5": "Case Study: The Rise of Disney+" },
+            { "item6": "Conclusion and Q&A" }
           ]
+        }
+      }
+    },
+    {
+      "id": "introduction_slide",
+      "title": "Introduction to Disney",
+      "fields": {
+        "introduction_text": {
+          "value": "Founded in 1923 by Walt Disney and Roy O. Disney, The Walt Disney Company has grown from a small animation studio to a global entertainment powerhouse. Today, Disney is synonymous with creativity, innovation, and family-friendly entertainment, encompassing media networks, theme parks, film studios, and streaming services."
+        },
+        "key_facts": {
+          "value": [
+            { "fact1": "Founded: October 16, 1923" },
+            { "fact2": "Headquarters: Burbank, California, USA" },
+            { "fact3": "CEO (2025): Robert A. Iger" },
+            { "fact4": "Revenue (2024): $95 billion" },
+            { "fact5": "Employees: ~220,000 worldwide" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "milestones_slide",
+      "title": "Key Milestones",
+      "fields": {
+        "milestones": {
+          "value": [
+            { "milestone1": "1928: Release of 'Steamboat Willie,' the debut of Mickey Mouse" },
+            { "milestone2": "1937: Release of 'Snow White and the Seven Dwarfs,' the first full-length animated feature" },
+            { "milestone3": "1955: Opening of Disneyland in Anaheim, California" },
+            { "milestone4": "1971: Opening of Walt Disney World Resort in Florida" },
+            { "milestone5": "1983: Launch of the Disney Channel" },
+            { "milestone6": "1995: Acquisition of ABC and ESPN" },
+            { "milestone7": "2006: Acquisition of Pixar Animation Studios" },
+            { "milestone8": "2012: Acquisition of Lucasfilm (Star Wars)" },
+            { "milestone9": "2019: Launch of Disney+, the company's streaming service" },
+            { "milestone10": "2020: Acquisition of 21st Century Fox" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "business_segments_slide",
+      "title": "Business Segments",
+      "fields": {
+        "segments": {
+          "value": [
+            { "segment1": "Media Networks: Includes television networks like ABC, ESPN, and Disney Channels, reaching millions of viewers globally." },
+            { "segment2": "Parks, Experiences and Products: Operates world-famous theme parks (Disneyland, Walt Disney World) and sells merchandise." },
+            { "segment3": "Studio Entertainment: Produces films under brands like Walt Disney Pictures, Pixar, Marvel, and Lucasfilm." },
+            { "segment4": "Direct-to-Consumer & International: Manages streaming services like Disney+, Hulu, and ESPN+, as well as international media operations." }
+          ]
+        }
+      }
+    },
+    {
+      "id": "financial_highlights_slide",
+      "title": "Financial Highlights",
+      "fields": {
+        "financial_data": {
+          "value": [
+            { "data1": "Revenue (2024): $95 billion" },
+            { "data2": "Net Income (2024): $8.2 billion" },
+            { "data3": "Disney+ Subscribers (2025): 200 million" },
+            { "data4": "Market Capitalization (2025): $280 billion" },
+            { "data5": "Total Assets (2024): $203 billion" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "case_study_slide",
+      "title": "Case Study: Disney+",
+      "fields": {
+        "case_study_text": {
+          "value": "Launched in November 2019, Disney+ has rapidly become one of the leading streaming platforms globally. Its success is driven by a vast library of exclusive content, including original series like 'The Mandalorian' and classic Disney films. Disney+ leverages the strength of Disney's iconic brands—Marvel, Star Wars, Pixar, and National Geographic—to attract a diverse audience."
+        },
+        "key_metrics": {
+          "value": [
+            { "metric1": "Subscribers: 200 million (as of 2025)" },
+            { "metric2": "Content Library: 10,000+ titles, including movies and TV shows" },
+            { "metric3": "Revenue (2024): $12 billion" },
+            { "metric4": "Global Reach: Available in over 100 countries" },
+            { "metric5": "Original Content: 500+ original titles produced since launch" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "conclusion_slide",
+      "title": "Conclusion",
+      "fields": {
+        "conclusion_text": {
+          "value": "The Walt Disney Company continues to set the standard for entertainment and innovation. With a diversified business model, a rich history of storytelling, and a commitment to expanding its global reach, Disney remains a leader in the entertainment industry. The success of Disney+ exemplifies the company's ability to adapt and thrive in an ever-changing market."
+        },
+        "takeaways": {
+          "value": [
+            { "takeaway1": "Disney's diversified business segments ensure resilience and growth." },
+            { "takeaway2": "Streaming services like Disney+ are critical to the company's future success." },
+            { "takeaway3": "Innovation and storytelling remain at the heart of Disney's brand identity." },
+            { "takeaway4": "Strategic acquisitions (Pixar, Marvel, Lucasfilm) have expanded Disney's content library and audience." }
+          ]
+        }
+      }
+    },
+    {
+      "id": "qna_slide",
+      "title": "Q&A",
+      "fields": {
+        "qna_text": {
+          "value": "Thank you for joining us today! We hope you enjoyed this journey through the magical world of Disney. We’d love to hear your thoughts and answer any questions you may have."
         }
       }
     }
