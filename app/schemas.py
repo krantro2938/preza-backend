@@ -3,6 +3,7 @@ from typing import Optional, List, Any
 
 class PresentationTemplateBase(BaseModel):
     title: Optional[str] = None
+    preview_url: Optional[str] = None
     slides: List[Any]
 
 class PresentationTemplateCreate(PresentationTemplateBase):
