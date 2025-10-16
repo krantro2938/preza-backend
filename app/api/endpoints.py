@@ -103,6 +103,10 @@ async def generate_presentation(
             presentation_data = json.loads(raw_content)
 
             slides_count = len(presentation_data.get("slides", []))
+            
+            uid = generate_presentation_uid()
+            base_pr_url = os.getenv("BASE_PRESENTATION_URL")
+            full_url = f"{base_pr_url}/{uid}"
 
             db_presentation = models.Presentation(
                 title=request.title,
@@ -111,7 +115,7 @@ async def generate_presentation(
                 generating=True,
                 slides_count=slides_count,
                 presentation_template_id=request.template_id,
-                presentation_url=None
+                presentation_url=full_url
             )
             db.add(db_presentation)
             db.commit()
