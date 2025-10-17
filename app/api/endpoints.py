@@ -147,58 +147,49 @@ def build_presentation_from_json(presentation_data: dict, title: str = "Presenta
     prs.slide_width = Inches(13.33)
     prs.slide_height = Inches(7.5)
 
-    title_slide_layout = prs.slide_layouts[0]
-    slide = prs.slides.add_slide(title_slide_layout)
-    title_box = slide.shapes.title
-    if title_box:
-        title_box.text = title
+    for slide_item in presentation_data.get("slides", []):
+        slide_id = slide_item.get("id")
+        fields = slide_item.get("fields", {})
 
-    for slide_data in presentation_data.get("slides", []):
-        slide_type = slide_data.get("type", "content")
-        content = slide_data.get("content", "")
+        if slide_id == "title":
+            text = fields.get("title", {}).get("value", "")
+            if text:
+                layout = prs.slide_layouts[0]
+                slide = prs.slides.add_slide(layout)
+                if slide.shapes.title:
+                    slide.shapes.title.text = str(text)
 
-        if slide_type == "title":
-            layout = prs.slide_layouts[1]
-            slide = prs.slides.add_slide(layout)
-            if slide.shapes.title:
-                slide.shapes.title.text = str(content)
-        elif slide_type == "bullet":
-            layout = prs.slide_layouts[1]
-            slide = prs.slides.add_slide(layout)
-            title = slide.shapes.title
-            body = slide.placeholders[1]
-            if title:
-                title.text = "Содержание"
-            if isinstance(content, list):
-                text_frame = body.text_frame
-                for i, item in enumerate(content):
-                    p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
-                    p.text = str(item)
-                    p.level = 0
-        elif slide_type == "text" or slide_type == "content":
-            layout = prs.slide_layouts[1]
-            slide = prs.slides.add_slide(layout)
-            if slide.shapes.title:
-                slide.shapes.title.text = "Слайд"
-            body = slide.placeholders[1]
-            text_frame = body.text_frame
-            text_frame.text = str(content)
-        elif slide_type == "image" and isinstance(content, dict):
-            layout = prs.slide_layouts[6]
-            slide = prs.slides.add_slide(layout)
-            img_url = content.get("url", "")
-            # Загрузка изображения по URL — заглушка
-            title_box = slide.shapes.title
-            if title_box:
-                title_box.text = "Изображение"
-        else:
-            layout = prs.slide_layouts[1]
-            slide = prs.slides.add_slide(layout)
-            if slide.shapes.title:
-                slide.shapes.title.text = "Слайд"
-            body = slide.placeholders[1]
-            text_frame = body.text_frame
-            text_frame.text = str(content)
+        elif slide_id == "bullet":
+            for key in sorted(fields.keys()):
+                field = fields[key]
+                value = field.get("value", {})
+                if isinstance(value, dict):
+                    block_type = value.get("type")
+                    content = value.get("content")
+
+                    if block_type == "title" and isinstance(content, str):
+                        layout = prs.slide_layouts[0]
+                        slide = prs.slides.add_slide(layout)
+                        if slide.shapes.title:
+                            slide.shapes.title.text = content
+
+                    elif block_type == "bullet" and isinstance(content, list):
+                        layout = prs.slide_layouts[1]
+                        slide = prs.slides.add_slide(layout)
+                        if slide.shapes.title:
+                            slide.shapes.title.text = "Содержание"
+                        body = slide.placeholders[1]
+                        text_frame = body.text_frame
+                        text_frame.clear()
+                        for i, item in enumerate(content):
+                            p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
+                            p.text = str(item)
+                            p.level = 0
+
+    if len(prs.slides) == 0:
+        slide = prs.slides.add_slide(prs.slide_layouts[0])
+        if slide.shapes.title:
+            slide.shapes.title.text = title
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp:
         prs.save(tmp.name)
