@@ -110,7 +110,7 @@ async def generate_presentation(
             slides_count = len(presentation_data.get("slides", []))
             
             uid = generate_presentation_uid()
-            base_pr_url = os.getenv("BASE_PRESENTATION_URL")
+            base_pr_url = os.getenv("PRESENTATION_BASE_URL")
             full_url = f"{base_pr_url}/{uid}"
 
             db_presentation = models.Presentation(
