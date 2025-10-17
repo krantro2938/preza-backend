@@ -93,6 +93,11 @@ async def generate_presentation(
             data = response.json()
 
             raw_content = data["choices"][0]["message"]["content"].strip()
+
+            print("=== RAW MODEL OUTPUT ===")
+            print(raw_content)
+            print("=========================")
+
             if raw_content.startswith("```"):
                 parts = raw_content.split("```", 2)
                 if len(parts) >= 2:
