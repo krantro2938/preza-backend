@@ -5,6 +5,11 @@ import httpx
 import os
 import json
 import secrets
+from fastapi.responses import FileResponse
+import tempfile
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
 
 router = APIRouter()
 
@@ -135,3 +140,94 @@ async def generate_presentation(
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+def build_presentation_from_json(presentation_data: dict, title: str = "Presentation") -> str:
+
+    prs = Presentation()
+    prs.slide_width = Inches(13.33)
+    prs.slide_height = Inches(7.5)
+
+    title_slide_layout = prs.slide_layouts[0]
+    slide = prs.slides.add_slide(title_slide_layout)
+    title_box = slide.shapes.title
+    if title_box:
+        title_box.text = title
+
+    for slide_data in presentation_data.get("slides", []):
+        slide_type = slide_data.get("type", "content")
+        content = slide_data.get("content", "")
+
+        if slide_type == "title":
+            layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(layout)
+            if slide.shapes.title:
+                slide.shapes.title.text = str(content)
+        elif slide_type == "bullet":
+            layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(layout)
+            title = slide.shapes.title
+            body = slide.placeholders[1]
+            if title:
+                title.text = "Содержание"
+            if isinstance(content, list):
+                text_frame = body.text_frame
+                for i, item in enumerate(content):
+                    p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
+                    p.text = str(item)
+                    p.level = 0
+        elif slide_type == "text" or slide_type == "content":
+            layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(layout)
+            if slide.shapes.title:
+                slide.shapes.title.text = "Слайд"
+            body = slide.placeholders[1]
+            text_frame = body.text_frame
+            text_frame.text = str(content)
+        elif slide_type == "image" and isinstance(content, dict):
+            layout = prs.slide_layouts[6]
+            slide = prs.slides.add_slide(layout)
+            img_url = content.get("url", "")
+            # Загрузка изображения по URL — заглушка
+            title_box = slide.shapes.title
+            if title_box:
+                title_box.text = "Изображение"
+        else:
+            layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(layout)
+            if slide.shapes.title:
+                slide.shapes.title.text = "Слайд"
+            body = slide.placeholders[1]
+            text_frame = body.text_frame
+            text_frame.text = str(content)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp:
+        prs.save(tmp.name)
+        return tmp.name
+
+@router.get("/presentations/{presentation_id}/download")
+async def download_presentation(presentation_id: int, db: Session = Depends(database.get_db)):
+    db_pres = db.query(models.Presentation).filter(
+        models.Presentation.id == presentation_id
+    ).first()
+    
+    if not db_pres:
+        raise HTTPException(status_code=404, detail="Presentation not found")
+
+    if not db_pres.presentation:
+        raise HTTPException(status_code=400, detail="Presentation data is empty")
+
+    try:
+        pptx_path = build_presentation_from_json(
+            db_pres.presentation,
+            title=db_pres.title or "Presentation"
+        )
+
+        filename = f"presentation_{presentation_id}.pptx"
+        return FileResponse(
+            path=pptx_path,
+            filename=filename,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate PPTX: {str(e)}")
