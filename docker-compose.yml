@@ -25,6 +25,7 @@ services:
     environment:
       DATABASE_URL: postgresql://admin:secret@postgres:5432/mydb
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      PRESENTATION_BASE_URL: ${PRESENTATION_BASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
