@@ -16,7 +16,7 @@ router = APIRouter()
 def read_system_prompt():
     with open("prompts/system.txt", "r", encoding="utf-8") as f:
         return f.read().strip()
-    
+
 def generate_presentation_uid():
     token = secrets.token_urlsafe(8)
     return f"pres_{token}"
@@ -54,7 +54,7 @@ async def generate_presentation(
     template = db.query(models.PresentationTemplate).filter(
         models.PresentationTemplate.id == request.template_id
     ).first()
-    
+
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -113,7 +113,7 @@ async def generate_presentation(
             presentation_data = json.loads(raw_content)
 
             slides_count = len(presentation_data.get("slides", []))
-            
+
             uid = generate_presentation_uid()
             base_pr_url = os.getenv("PRESENTATION_BASE_URL")
             full_url = f"{base_pr_url}/{uid}"
@@ -140,6 +140,32 @@ async def generate_presentation(
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+def pptx_to_json(path: str) -> dict:
+    prs = Presentation(path)
+    slides = []
+    for slide in prs.slides:
+        title = slide.shapes.title.text.strip() if slide.shapes.title and slide.shapes.title.has_text_frame else ""
+        bullets = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False) and shape is not slide.shapes.title:
+                for p in shape.text_frame.paragraphs:
+                    if (p.text or "").strip() and getattr(p, "level", 0) == 0:
+                        bullets.append(p.text.strip())
+
+        if bullets:
+            slides.append({
+                "id": "bullet",
+                "fields": {
+                    "1": {"value": {"type": "title", "content": title or "Раздел"}},
+                    "2": {"value": {"type": "bullet", "content": bullets}}
+                }
+            })
+        elif title:
+            slides.append({"id": "title", "fields": {"title": {"value": title}}})
+
+    return {"slides": slides}
+
 
 def build_presentation_from_json(presentation_data: dict, title: str = "Presentation") -> str:
 
@@ -200,7 +226,7 @@ async def download_presentation(presentation_id: int, db: Session = Depends(data
     db_pres = db.query(models.Presentation).filter(
         models.Presentation.id == presentation_id
     ).first()
-    
+
     if not db_pres:
         raise HTTPException(status_code=404, detail="Presentation not found")
 
