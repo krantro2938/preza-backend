@@ -1,0 +1,1023 @@
+import os
+import tempfile
+import uuid
+import asyncio
+import aiohttp
+import aiofiles
+from typing import Optional, Dict
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
+from PIL import Image
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from database_models import Presentation as PresentationModel
+
+
+class PPTXService:
+    
+    def __init__(self):
+        pass
+    
+    async def export_to_pptx(self, db: AsyncSession, presentation_id: uuid.UUID) -> str:
+        """Export presentation to PPTX and return file path"""
+        
+        # Get presentation with slides
+        result = await db.execute(
+            select(PresentationModel)
+            .options(selectinload(PresentationModel.slides))
+            .where(PresentationModel.id == presentation_id)
+        )
+        
+        presentation_data = result.scalar_one_or_none()
+        if not presentation_data:
+            raise ValueError("Презентация не найдена")
+        
+        # Sort slides by slide_number
+        slides = sorted(presentation_data.slides, key=lambda s: s.slide_number)
+        
+        # Create temporary directory for downloading images
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            # Download all images first
+            image_paths = await self._download_images(slides, temp_dir)
+            
+            # Create PPTX presentation
+            ppt = Presentation()
+            
+            # Set slide size to 16:9
+            ppt.slide_width = Inches(13.33)
+            ppt.slide_height = Inches(7.5)
+            
+            for slide_data in slides:
+                self._add_slide(ppt, slide_data, image_paths.get(slide_data.slide_number))
+            
+            # Save to temporary file
+            with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as temp_file:
+                ppt.save(temp_file.name)
+                return temp_file.name
+                
+        finally:
+            # Clean up temp directory
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except:
+                pass
+    
+    async def _download_images(self, slides, temp_dir: str) -> Dict[int, str]:
+        """Download all images and return mapping of slide_number to local path"""
+        image_paths = {}
+        
+        download_tasks = []
+        slide_numbers = []
+        
+        for slide in slides:
+            if slide.image_url:
+                slide_numbers.append(slide.slide_number)
+                download_tasks.append(self._download_image(slide.image_url, temp_dir))
+        
+        if download_tasks:
+            downloaded_paths = await asyncio.gather(*download_tasks, return_exceptions=True)
+            
+            for slide_number, path in zip(slide_numbers, downloaded_paths):
+                if isinstance(path, str) and os.path.exists(path):
+                    image_paths[slide_number] = path
+                    
+        return image_paths
+    
+    async def _download_image(self, image_url: str, temp_dir: str) -> Optional[str]:
+        """Download a single image and return local path"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as response:
+                    if response.status == 200:
+                        # Generate unique filename
+                        file_extension = '.jpg'  # Default to jpg
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'png' in content_type:
+                            file_extension = '.png'
+                        elif 'webp' in content_type:
+                            file_extension = '.webp'
+                            
+                        filename = f"{uuid.uuid4()}{file_extension}"
+                        file_path = os.path.join(temp_dir, filename)
+                        
+                        # Download and save file
+                        async with aiofiles.open(file_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                await f.write(chunk)
+                        
+                        # Convert to JPG if needed for better PPTX compatibility
+                        if file_extension != '.jpg':
+                            jpg_path = await self._convert_to_jpg(file_path, temp_dir)
+                            if jpg_path:
+                                return jpg_path
+                        
+                        return file_path
+        except Exception as e:
+            print(f"Error downloading image {image_url}: {e}")
+            return None
+    
+    async def _convert_to_jpg(self, image_path: str, temp_dir: str) -> Optional[str]:
+        """Convert image to JPG format"""
+        try:
+            with Image.open(image_path) as img:
+                # Convert RGBA to RGB for JPG
+                if img.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                jpg_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+                img.save(jpg_path, 'JPEG', quality=90)
+                
+                # Remove original file
+                os.remove(image_path)
+                
+                return jpg_path
+        except Exception as e:
+            print(f"Error converting image to JPG: {e}")
+            return image_path  # Return original on error
+    
+    def _add_slide(self, ppt: Presentation, slide_data, image_path: Optional[str]):
+        """Add a slide to the presentation"""
+        
+        # Use blank slide layout
+        blank_slide_layout = ppt.slide_layouts[6]
+        slide = ppt.slides.add_slide(blank_slide_layout)
+        
+        if slide_data.layout == 'title-slide':
+            self._create_title_slide(slide, slide_data)
+        else:
+            # Add variety to slides based on slide number
+            slide_style = self._get_slide_style(slide_data.slide_number)
+            self._create_content_slide(slide, slide_data, image_path, slide_style)
+    
+    def _create_title_slide(self, slide, slide_data):
+        """Create a title slide with gradient background"""
+        
+        # Set background to gradient (simplified - solid color)
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = RGBColor(99, 102, 241)  # Primary blue
+        
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            Inches(1), Inches(2), Inches(11.33), Inches(2)
+        )
+        title_frame = title_box.text_frame
+        title_frame.word_wrap = True
+        title_para = title_frame.paragraphs[0]
+        title_para.text = slide_data.title
+        title_para.alignment = PP_ALIGN.CENTER
+        
+        # Title font
+        title_font = title_para.font
+        title_font.name = 'Inter'
+        title_font.size = Pt(54)
+        title_font.bold = True
+        title_font.color.rgb = RGBColor(255, 255, 255)
+        
+        # Add content if exists
+        if slide_data.content:
+            content_box = slide.shapes.add_textbox(
+                Inches(2), Inches(4.5), Inches(9.33), Inches(1.5)
+            )
+            content_frame = content_box.text_frame
+            content_frame.word_wrap = True
+            content_para = content_frame.paragraphs[0]
+            content_para.text = self._clean_markdown(slide_data.content)
+            content_para.alignment = PP_ALIGN.CENTER
+            
+            # Content font
+            content_font = content_para.font
+            content_font.name = 'Inter'
+            content_font.size = Pt(20)
+            content_font.color.rgb = RGBColor(255, 255, 255)
+    
+    def _get_slide_style(self, slide_number: int) -> dict:
+        """Get style variations for different slides to avoid monotony"""
+        styles = [
+            {
+                "layout": "image_left",
+                "bullet_type": "numbers",
+                "accent_color": RGBColor(99, 102, 241),   # Primary blue
+                "circle_colors": [RGBColor(99, 102, 241), RGBColor(147, 51, 234)],  # Blue & Purple
+                "text_alignment": "left"
+            },
+            {
+                "layout": "image_right", 
+                "bullet_type": "dots", 
+                "accent_color": RGBColor(147, 51, 234),  # Purple
+                "circle_colors": [RGBColor(147, 51, 234), RGBColor(59, 130, 246)],  # Purple & Light blue
+                "text_alignment": "left"
+            },
+            {
+                "layout": "text_only",
+                "bullet_type": "numbers",
+                "accent_color": RGBColor(59, 130, 246),  # Light blue
+                "circle_colors": [RGBColor(59, 130, 246), RGBColor(16, 185, 129)],  # Light blue & Green
+                "text_alignment": "center"
+            },
+            {
+                "layout": "split_content",
+                "bullet_type": "dots",
+                "accent_color": RGBColor(16, 185, 129),  # Green
+                "circle_colors": [RGBColor(16, 185, 129), RGBColor(245, 158, 11)],  # Green & Orange
+                "text_alignment": "left"
+            },
+            {
+                "layout": "image_top",
+                "bullet_type": "numbers", 
+                "accent_color": RGBColor(245, 158, 11),  # Orange
+                "circle_colors": [RGBColor(245, 158, 11), RGBColor(239, 68, 68)],  # Orange & Red
+                "text_alignment": "center"
+            },
+            {
+                "layout": "grid_layout",
+                "bullet_type": "dots",
+                "accent_color": RGBColor(239, 68, 68),  # Red
+                "circle_colors": [RGBColor(239, 68, 68), RGBColor(99, 102, 241)],  # Red & Blue
+                "text_alignment": "left"
+            }
+        ]
+        return styles[(slide_number - 1) % len(styles)]
+    
+    def _create_content_slide(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Create a content slide with image and text using different layout styles"""
+        
+        # Set white background
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = RGBColor(255, 255, 255)
+        
+        # Route to different layout methods based on style
+        layout_type = slide_style.get("layout", "image_left")
+        
+        if layout_type == "image_left":
+            self._create_image_left_layout(slide, slide_data, image_path, slide_style)
+        elif layout_type == "image_right":
+            self._create_image_right_layout(slide, slide_data, image_path, slide_style)
+        elif layout_type == "text_only":
+            self._create_text_only_layout(slide, slide_data, slide_style)
+        elif layout_type == "split_content":
+            self._create_split_content_layout(slide, slide_data, image_path, slide_style)
+        elif layout_type == "image_top":
+            self._create_image_top_layout(slide, slide_data, image_path, slide_style)
+        elif layout_type == "grid_layout":
+            self._create_grid_layout(slide, slide_data, image_path, slide_style)
+        else:
+            # Fallback to image_left
+            self._create_image_left_layout(slide, slide_data, image_path, slide_style)
+    
+    def _create_image_left_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Original layout - image on left, text on right"""
+        
+        if image_path and os.path.exists(image_path):
+            # Add image on the left with styling to match web UI
+            try:
+                # Add white background container (mimicking the web UI design)
+                bg_container = slide.shapes.add_shape(
+                    1,  # Rectangle shape
+                    Inches(0.4), Inches(1.4), Inches(6.2), Inches(4.2)  # Reduced padding
+                )
+                bg_container.fill.solid()
+                bg_container.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+                bg_container.line.color.rgb = RGBColor(229, 231, 235)  # Light gray border
+                bg_container.line.width = Pt(1)
+                
+                # Add rounded corners (limited support in PPTX)
+                try:
+                    # Add rounded rectangle effect
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    sp_element = bg_container._element
+                    sp_pr = sp_element.xpath("p:spPr")[0]
+                    nsmap = sp_pr.nsmap
+                    
+                    # Add rounded rectangle geometry
+                    prst_geom = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")  # Smaller rounded corner radius
+                except:
+                    pass  # Rounded corners are optional
+                
+                # Add shadow effect (simplified)
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    sp_element = bg_container._element
+                    sp_pr = sp_element.xpath("p:spPr")[0]
+                    nsmap = sp_pr.nsmap
+                    effect_list = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}effectLst", nsmap=nsmap)
+                    outer_shadow = etree.SubElement(
+                        effect_list, f"{{{nsmap['a']}}}outerShdw",
+                        {"blurRad": "38100", "dist": "25400", "dir": "5400000", "algn": "tl"},
+                        nsmap=nsmap
+                    )
+                    color_element = etree.SubElement(
+                        outer_shadow, f"{{{nsmap['a']}}}srgbClr", {"val": "000000"}, nsmap=nsmap
+                    )
+                    etree.SubElement(
+                        color_element, f"{{{nsmap['a']}}}alpha", {"val": "15000"}, nsmap=nsmap
+                    )
+                except:
+                    pass  # Shadow is optional, continue without it
+                
+                # Add the actual image with padding (matching web UI) and make it rounded
+                image_shape = slide.shapes.add_picture(
+                    image_path, 
+                    Inches(0.55),  # left (with smaller padding)
+                    Inches(1.55),  # top (with smaller padding) 
+                    Inches(5.9),   # width (accounting for smaller padding)
+                    Inches(3.9)    # height (accounting for smaller padding)
+                )
+                
+                # Apply rounded corners to the image itself
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    pic_element = image_shape._element
+                    pic_pr = pic_element.xpath("p:spPr")[0]
+                    nsmap = pic_pr.nsmap
+                    
+                    # Add rounded rectangle geometry to image
+                    prst_geom = etree.SubElement(pic_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")  # Smaller rounded corner radius for image
+                except:
+                    pass  # Rounded image is optional
+                
+                # Add decorative circles to match web UI (positioned closer to rounded border edges)
+                # Top-right circle (primary color) - positioned closer to rounded corner
+                circle1 = slide.shapes.add_shape(
+                    9,  # Oval shape
+                    Inches(6.35), Inches(1.35), Inches(0.25), Inches(0.25)  # Closer to rounded corner
+                )
+                circle1.fill.solid()
+                circle1.fill.fore_color.rgb = slide_style["circle_colors"][0]
+                circle1.line.fill.background()
+                
+                # Bottom-left circle (purple) - positioned closer to rounded corner
+                circle2 = slide.shapes.add_shape(
+                    9,  # Oval shape
+                    Inches(0.35), Inches(5.25), Inches(0.2), Inches(0.2)  # Closer to rounded corner
+                )
+                circle2.fill.solid()
+                circle2.fill.fore_color.rgb = slide_style["circle_colors"][1]
+                
+            except Exception as e:
+                print(f"Error adding image to slide: {e}")
+                
+            # Text on the right with more gap
+            text_left = Inches(7.5)  # Increased gap from image
+            text_width = Inches(5.33)  # Adjusted width accordingly
+        else:
+            # Full width text if no image
+            text_left = Inches(1)
+            text_width = Inches(11.33)
+        
+        # Add content for image_left layout
+        self._add_slide_content(slide, slide_data, slide_style, text_left, text_width)
+    
+    def _create_image_right_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Image on right, text on left layout"""
+        
+        if image_path and os.path.exists(image_path):
+            # Image on the right side
+            try:
+                # Add white background container (mimicking the web UI design)
+                bg_container = slide.shapes.add_shape(
+                    1,  # Rectangle shape
+                    Inches(7), Inches(1.4), Inches(6.2), Inches(4.2)  # Right side position
+                )
+                bg_container.fill.solid()
+                bg_container.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+                bg_container.line.color.rgb = RGBColor(229, 231, 235)  # Light gray border
+                bg_container.line.width = Pt(1)
+                
+                # Add rounded corners
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    sp_element = bg_container._element
+                    sp_pr = sp_element.xpath("p:spPr")[0]
+                    nsmap = sp_pr.nsmap
+                    
+                    prst_geom = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")
+                except:
+                    pass
+                
+                # Add the actual image
+                image_shape = slide.shapes.add_picture(
+                    image_path, 
+                    Inches(7.15), Inches(1.55), Inches(5.9), Inches(3.9)
+                )
+                
+                # Apply rounded corners to image
+                try:
+                    pic_element = image_shape._element
+                    pic_pr = pic_element.xpath("p:spPr")[0]
+                    nsmap = pic_pr.nsmap
+                    
+                    prst_geom = etree.SubElement(pic_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")
+                except:
+                    pass
+                
+                # Add decorative circles
+                circle1 = slide.shapes.add_shape(
+                    9, Inches(12.85), Inches(1.2), Inches(0.25), Inches(0.25)
+                )
+                circle1.fill.solid()
+                circle1.fill.fore_color.rgb = slide_style["circle_colors"][0]
+                circle1.line.fill.background()
+                
+                circle2 = slide.shapes.add_shape(
+                    9, Inches(6.75), Inches(5.25), Inches(0.2), Inches(0.2)
+                )
+                circle2.fill.solid()
+                circle2.fill.fore_color.rgb = slide_style["circle_colors"][1]
+                circle2.line.fill.background()
+                
+            except Exception as e:
+                print(f"Error adding image to slide: {e}")
+            
+            # Text on the left
+            text_left = Inches(1)
+            text_width = Inches(5.5)
+        else:
+            # Full width text if no image
+            text_left = Inches(1)
+            text_width = Inches(11.33)
+        
+        self._add_slide_content(slide, slide_data, slide_style, text_left, text_width)
+    
+    def _create_text_only_layout(self, slide, slide_data, slide_style: dict):
+        """Text-only layout, no images - centered content"""
+        
+        # Center everything
+        text_left = Inches(2)
+        text_width = Inches(9.33)
+        
+        # Add simple decorative elements
+        # Small decorative circles
+        circle1 = slide.shapes.add_shape(
+            9, Inches(1), Inches(1), Inches(0.3), Inches(0.3)
+        )
+        circle1.fill.solid()
+        circle1.fill.fore_color.rgb = slide_style["accent_color"]
+        circle1.line.fill.background()
+        
+        circle2 = slide.shapes.add_shape(
+            9, Inches(11.5), Inches(6), Inches(0.4), Inches(0.4)
+        )
+        circle2.fill.solid()
+        circle2.fill.fore_color.rgb = slide_style["circle_colors"][1]
+        circle2.line.fill.background()
+        
+        self._add_slide_content(slide, slide_data, slide_style, text_left, text_width)
+    
+    def _create_split_content_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Split content layout - matching web UI 3-column design exactly"""
+        
+        # Add title spanning full width at top
+        title_box = slide.shapes.add_textbox(
+            Inches(0.5), Inches(0.5), Inches(12.33), Inches(1)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = slide_data.title
+        title_para.alignment = PP_ALIGN.CENTER
+        
+        title_font = title_para.font
+        title_font.name = 'Inter'
+        title_font.size = Pt(28)  # Smaller to match web UI
+        title_font.bold = True
+        title_font.color.rgb = RGBColor(17, 24, 39)
+        
+        # Add accent line below title
+        accent_line = slide.shapes.add_shape(
+            1, Inches(6), Inches(1.3), Inches(1.33), Inches(0.06)
+        )
+        accent_line.fill.solid()
+        accent_line.fill.fore_color.rgb = slide_style["accent_color"]
+        accent_line.line.fill.background()
+        
+        # Three column layout: bullets, image, description
+        if image_path and os.path.exists(image_path):
+            # Left Column - Bullets (matching web UI spacing)
+            if slide_data.content:
+                bullet_lines = [line.strip()[1:].strip() for line in slide_data.content.split('\n') 
+                               if line.strip().startswith('-')][:4]  # Max 4 bullets
+                
+                bullets_box = slide.shapes.add_textbox(
+                    Inches(0.3), Inches(2), Inches(3.8), Inches(4)
+                )
+                bullets_frame = bullets_box.text_frame
+                bullets_frame.word_wrap = True
+                bullets_frame.margin_left = Pt(0)
+                bullets_frame.margin_right = Pt(0)
+                bullets_frame.margin_top = Pt(0)
+                bullets_frame.margin_bottom = Pt(0)
+                
+                for i, bullet_text in enumerate(bullet_lines):
+                    if i == 0:
+                        para = bullets_frame.paragraphs[0]
+                    else:
+                        para = bullets_frame.add_paragraph()
+                    
+                    # Add green dot bullet to match web UI
+                    dot_run = para.add_run()
+                    dot_run.text = "●"
+                    dot_run.font.name = 'Inter'
+                    dot_run.font.size = Pt(12)
+                    dot_run.font.color.rgb = slide_style["accent_color"]
+                    
+                    # Add spacing
+                    space_run = para.add_run()
+                    space_run.text = "   "  # 3 spaces for proper alignment
+                    
+                    # Add text
+                    text_run = para.add_run()
+                    text_run.text = bullet_text
+                    text_run.font.name = 'Inter'
+                    text_run.font.size = Pt(13)  # Smaller to match web UI
+                    text_run.font.color.rgb = RGBColor(55, 65, 81)
+                    
+                    para.space_after = Pt(18)  # Larger spacing like web UI
+                    para.alignment = PP_ALIGN.LEFT
+            
+            # Center Column - Image with rounded container (matching web UI)
+            try:
+                # Add rounded image container to match web UI
+                img_container = slide.shapes.add_shape(
+                    1, Inches(4.5), Inches(2), Inches(4.33), Inches(4)
+                )
+                img_container.fill.solid()
+                img_container.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White like web UI
+                img_container.line.color.rgb = RGBColor(209, 213, 219)  # Light border
+                img_container.line.width = Pt(1)
+                
+                # Add rounded corners to container
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    sp_element = img_container._element
+                    sp_pr = sp_element.xpath("p:spPr")[0]
+                    nsmap = sp_pr.nsmap
+                    
+                    prst_geom = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")
+                except:
+                    pass
+                
+                # Add shadow effect
+                try:
+                    effect_list = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}effectLst", nsmap=nsmap)
+                    outer_shadow = etree.SubElement(
+                        effect_list, f"{{{nsmap['a']}}}outerShdw",
+                        {"blurRad": "50800", "dist": "19050", "dir": "5400000", "algn": "tl"},
+                        nsmap=nsmap
+                    )
+                    color_element = etree.SubElement(
+                        outer_shadow, f"{{{nsmap['a']}}}srgbClr", {"val": "000000"}, nsmap=nsmap
+                    )
+                    etree.SubElement(
+                        color_element, f"{{{nsmap['a']}}}alpha", {"val": "12000"}, nsmap=nsmap
+                    )
+                except:
+                    pass
+                
+                # Add image with padding
+                image_shape = slide.shapes.add_picture(
+                    image_path, 
+                    Inches(4.65), Inches(2.15), Inches(4.03), Inches(3.7)
+                )
+                
+                # Round the image corners too
+                try:
+                    pic_element = image_shape._element
+                    pic_pr = pic_element.xpath("p:spPr")[0]
+                    nsmap = pic_pr.nsmap
+                    
+                    prst_geom = etree.SubElement(pic_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 8333")
+                except:
+                    pass
+                    
+            except Exception as e:
+                print(f"Error adding image to slide: {e}")
+            
+            # Right Column - Description box (matching web UI styling)
+            desc_box = slide.shapes.add_shape(
+                1, Inches(9.2), Inches(2), Inches(3.6), Inches(4)
+            )
+            desc_box.fill.solid()
+            desc_box.fill.fore_color.rgb = RGBColor(249, 250, 251)  # Light gray like web UI
+            desc_box.line.color.rgb = RGBColor(229, 231, 235)
+            desc_box.line.width = Pt(1)
+            
+            # Round the description box
+            try:
+                from pptx.oxml.xmlchemy import OxmlElement
+                from lxml import etree
+                sp_element = desc_box._element
+                sp_pr = sp_element.xpath("p:spPr")[0]
+                nsmap = sp_pr.nsmap
+                
+                prst_geom = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                prst_geom.set("prst", "roundRect")
+                av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                gd.set("name", "adj")
+                gd.set("fmla", "val 8333")
+            except:
+                pass
+            
+            # Add description text
+            desc_frame = desc_box.text_frame
+            desc_frame.word_wrap = True
+            desc_frame.margin_left = Pt(20)
+            desc_frame.margin_right = Pt(20)
+            desc_frame.margin_top = Pt(20)
+            desc_frame.margin_bottom = Pt(20)
+            
+            # Add heading
+            heading_para = desc_frame.paragraphs[0]
+            heading_para.text = "Ключевые выводы"
+            heading_para.alignment = PP_ALIGN.LEFT
+            
+            heading_font = heading_para.font
+            heading_font.name = 'Inter'
+            heading_font.size = Pt(16)
+            heading_font.bold = True
+            heading_font.color.rgb = RGBColor(17, 24, 39)
+            
+            # Add description text - use dynamic content or fallback
+            desc_para = desc_frame.add_paragraph()
+            
+            # Extract key insights from content (last non-bullet line)
+            if slide_data.content:
+                # Get non-bullet lines that come after bullets (key insights)
+                lines = slide_data.content.split('\n')
+                non_bullet_lines = [line.strip() for line in lines 
+                                   if line.strip() and not line.strip().startswith('-')]
+                # Take the last non-empty line as key insights
+                desc_text = non_bullet_lines[-1] if non_bullet_lines else 'Стратегические выводы и основные рекомендации по этому разделу.'
+            else:
+                desc_text = 'Основные выводы и рекомендации по данной теме.'
+            
+            desc_para.text = desc_text
+            desc_para.alignment = PP_ALIGN.LEFT
+            desc_para.space_before = Pt(12)
+            
+            desc_font = desc_para.font
+            desc_font.name = 'Inter'
+            desc_font.size = Pt(13)
+            desc_font.color.rgb = RGBColor(75, 85, 99)
+            
+            # Add decorative circles (matching web UI)
+            circles_para = desc_frame.add_paragraph()
+            circles_para.text = "● ● ●"
+            circles_para.alignment = PP_ALIGN.LEFT
+            circles_para.space_before = Pt(16)
+            
+            circles_font = circles_para.font
+            circles_font.name = 'Inter'
+            circles_font.size = Pt(12)
+            circles_font.color.rgb = slide_style["accent_color"]
+            
+        else:
+            # Fall back to regular layout
+            self._add_slide_content(slide, slide_data, slide_style, Inches(1), Inches(11.33))
+    
+    def _create_image_top_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Image on top, text below layout"""
+        
+        if image_path and os.path.exists(image_path):
+            # Image at top - full width to match web UI
+            try:
+                slide.shapes.add_picture(
+                    image_path, 
+                    Inches(0), Inches(0), Inches(13.33), Inches(3.2)
+                )
+            except Exception as e:
+                print(f"Error adding image to slide: {e}")
+            
+            # Text below image - adjusted for larger image
+            text_left = Inches(1)
+            text_top = Inches(3.8)
+            text_width = Inches(11.33)
+        else:
+            # No image, normal text positioning
+            text_left = Inches(1)
+            text_top = Inches(1)
+            text_width = Inches(11.33)
+        
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            text_left, text_top, text_width, Inches(1)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = slide_data.title
+        title_para.alignment = PP_ALIGN.CENTER if slide_style["text_alignment"] == "center" else PP_ALIGN.LEFT
+        
+        title_font = title_para.font
+        title_font.name = 'Inter'
+        title_font.size = Pt(36)
+        title_font.bold = True
+        title_font.color.rgb = RGBColor(17, 24, 39)
+        
+        # Add accent line
+        line_left = text_left if slide_style["text_alignment"] == "left" else Inches(6)
+        accent_line = slide.shapes.add_shape(
+            1, line_left, text_top + Inches(1.1), Inches(1.2), Inches(0.06)
+        )
+        accent_line.fill.solid()
+        accent_line.fill.fore_color.rgb = slide_style["accent_color"]
+        accent_line.line.fill.background()
+        
+        # Add content
+        if slide_data.content:
+            content_box = slide.shapes.add_textbox(
+                text_left, text_top + Inches(1.5), text_width, Inches(3)
+            )
+            content_frame = content_box.text_frame
+            content_frame.word_wrap = True
+            
+            self._process_bullet_content(content_frame, slide_data.content, slide_style)
+    
+    def _create_grid_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
+        """Grid layout - content in structured boxes"""
+        
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            Inches(1), Inches(0.5), Inches(11.33), Inches(1)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = slide_data.title
+        title_para.alignment = PP_ALIGN.CENTER
+        
+        title_font = title_para.font
+        title_font.name = 'Inter'
+        title_font.size = Pt(36)
+        title_font.bold = True
+        title_font.color.rgb = RGBColor(17, 24, 39)
+        
+        # Add accent line
+        accent_line = slide.shapes.add_shape(
+            1, Inches(5.5), Inches(1.6), Inches(2.33), Inches(0.06)
+        )
+        accent_line.fill.solid()
+        accent_line.fill.fore_color.rgb = slide_style["accent_color"]
+        accent_line.line.fill.background()
+        
+        if slide_data.content:
+            lines = [line.strip() for line in slide_data.content.split('\n') if line.strip().startswith('-')]
+            
+            # Create grid boxes for content
+            box_width = Inches(5.5)
+            box_height = Inches(2.2)
+            
+            positions = [
+                (Inches(1), Inches(2.3)),      # Top left
+                (Inches(7.3), Inches(2.3)),    # Top right  
+                (Inches(1), Inches(4.8)),      # Bottom left
+                (Inches(7.3), Inches(4.8))     # Bottom right
+            ]
+            
+            for i, line in enumerate(lines[:4]):  # Max 4 boxes
+                if i >= len(positions):
+                    break
+                    
+                pos_x, pos_y = positions[i]
+                
+                # Create box
+                box = slide.shapes.add_shape(
+                    1, pos_x, pos_y, box_width, box_height
+                )
+                box.fill.solid()
+                box.fill.fore_color.rgb = RGBColor(248, 250, 252)  # Very light gray
+                box.line.color.rgb = slide_style["accent_color"]
+                box.line.width = Pt(2)
+                
+                # Add rounded corners
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from lxml import etree
+                    sp_element = box._element
+                    sp_pr = sp_element.xpath("p:spPr")[0]
+                    nsmap = sp_pr.nsmap
+                    
+                    prst_geom = etree.SubElement(sp_pr, f"{{{nsmap['a']}}}prstGeom", nsmap=nsmap)
+                    prst_geom.set("prst", "roundRect")
+                    av_lst = etree.SubElement(prst_geom, f"{{{nsmap['a']}}}avLst", nsmap=nsmap)
+                    gd = etree.SubElement(av_lst, f"{{{nsmap['a']}}}gd", nsmap=nsmap)
+                    gd.set("name", "adj")
+                    gd.set("fmla", "val 16667")  # More rounded
+                except:
+                    pass
+                
+                # Add number badge in corner
+                badge = slide.shapes.add_shape(
+                    9, pos_x + Inches(0.3), pos_y + Inches(0.3), Inches(0.5), Inches(0.5)
+                )
+                badge.fill.solid()
+                badge.fill.fore_color.rgb = slide_style["accent_color"]
+                badge.line.fill.background()
+                
+                # Add number to badge
+                badge_frame = badge.text_frame
+                badge_para = badge_frame.paragraphs[0]
+                badge_para.text = str(i + 1)
+                badge_para.alignment = PP_ALIGN.CENTER
+                badge_font = badge_para.font
+                badge_font.name = 'Inter'
+                badge_font.size = Pt(14)
+                badge_font.bold = True
+                badge_font.color.rgb = RGBColor(255, 255, 255)
+                
+                # Add text to box
+                text_frame = box.text_frame
+                text_frame.word_wrap = True
+                text_frame.margin_left = Pt(24)
+                text_frame.margin_right = Pt(24)
+                text_frame.margin_top = Pt(40)  # Leave space for badge
+                text_frame.margin_bottom = Pt(24)
+                
+                para = text_frame.paragraphs[0]
+                para.text = line.strip()[1:].strip()  # Remove the dash
+                para.alignment = PP_ALIGN.CENTER
+                
+                font = para.font
+                font.name = 'Inter'
+                font.size = Pt(16)
+                font.color.rgb = RGBColor(55, 65, 81)
+    
+    def _add_slide_content(self, slide, slide_data, slide_style: dict, text_left, text_width):
+        """Add title, accent line, and content to slide"""
+        
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            text_left, Inches(1), text_width, Inches(1.5)
+        )
+        title_frame = title_box.text_frame
+        title_frame.word_wrap = True
+        title_para = title_frame.paragraphs[0]
+        title_para.text = slide_data.title
+        
+        # Apply alignment based on style
+        if slide_style["text_alignment"] == "center":
+            title_para.alignment = PP_ALIGN.CENTER
+        else:
+            title_para.alignment = PP_ALIGN.LEFT
+        
+        # Title font
+        title_font = title_para.font
+        title_font.name = 'Inter'
+        title_font.size = Pt(36)
+        title_font.bold = True
+        title_font.color.rgb = RGBColor(17, 24, 39)  # Gray 900
+        
+        # Add accent line (always present, matching web UI)
+        line_left = text_left if slide_style["text_alignment"] == "left" else text_left + (text_width / 2) - Inches(0.6)
+        accent_line = slide.shapes.add_shape(
+            1,  # Rectangle shape
+            line_left, Inches(2.6), Inches(1.2), Inches(0.06)
+        )
+        accent_line.fill.solid()
+        accent_line.fill.fore_color.rgb = slide_style["accent_color"]
+        accent_line.line.fill.background()
+        
+        # Add content with proper bullet points
+        if slide_data.content:
+            content_box = slide.shapes.add_textbox(
+                text_left, Inches(3), text_width, Inches(4)
+            )
+            content_frame = content_box.text_frame
+            content_frame.word_wrap = True
+            
+            self._process_bullet_content(content_frame, slide_data.content, slide_style)
+    
+    def _process_bullet_content(self, content_frame, content_text: str, slide_style: dict):
+        """Process bullet point content with style variations"""
+        
+        content_lines = content_text.split('\n')
+        
+        first_para = True
+        bullet_count = 0
+        
+        for line in content_lines:
+            if not line.strip():
+                continue
+                
+            if first_para:
+                para = content_frame.paragraphs[0]
+                first_para = False
+            else:
+                para = content_frame.add_paragraph()
+            
+            # Handle bullet points with style variations
+            if line.strip().startswith('-'):
+                bullet_count += 1
+                
+                if slide_style["bullet_type"] == "numbers":
+                    # Create numbered list (01, 02, 03, etc.)
+                    bullet_run = para.add_run()
+                    bullet_run.text = f"{bullet_count:02d}"  # Format as 01, 02, 03...
+                    bullet_run.font.name = 'Inter'
+                    bullet_run.font.size = Pt(16)  # Slightly smaller for numbers
+                    bullet_run.font.bold = True
+                    bullet_run.font.color.rgb = slide_style["accent_color"]
+                    
+                    # Add period and spacing
+                    period_run = para.add_run()
+                    period_run.text = ".  "  # Period and spaces
+                    period_run.font.name = 'Inter'
+                    period_run.font.size = Pt(16)
+                    period_run.font.color.rgb = slide_style["accent_color"]
+                else:
+                    # Create bullet dot
+                    bullet_run = para.add_run()
+                    bullet_run.text = "●"  # Just the bullet character
+                    bullet_run.font.name = 'Inter'
+                    bullet_run.font.size = Pt(20)  # Larger size for visibility
+                    bullet_run.font.color.rgb = slide_style["accent_color"]
+                    
+                    # Add spacing after bullet
+                    space_run = para.add_run()
+                    space_run.text = "  "  # Two spaces for proper spacing
+                
+                # Add text content
+                text_run = para.add_run()
+                text_run.text = line.strip()[1:].strip()
+                text_run.font.name = 'Inter'
+                text_run.font.size = Pt(18)  # text-lg in web UI
+                text_run.font.color.rgb = RGBColor(55, 65, 81)  # Gray 700
+                
+                # Set paragraph alignment
+                para.alignment = PP_ALIGN.LEFT
+                
+                # Set spacing between bullets to match mb-4 (16px)
+                para.space_after = Pt(16)  # Matching mb-4
+                para.space_before = Pt(0)  # No space before
+                
+                # Adjust line spacing for better bullet alignment
+                para.line_spacing = 1.2  # Tighter line spacing
+                
+            else:
+                # Non-bullet text
+                para.text = self._clean_markdown(line)
+                font = para.font
+                font.name = 'Inter'
+                font.size = Pt(18)  # text-lg to match web UI
+                font.color.rgb = RGBColor(55, 65, 81)  # Gray 700
+    
+    def _clean_markdown(self, text: str) -> str:
+        """Clean markdown formatting for PPTX"""
+        if not text:
+            return ""
+        
+        # Remove markdown formatting
+        text = text.replace('**', '')
+        text = text.replace('*', '')
+        text = text.replace('###', '')
+        text = text.replace('##', '')
+        text = text.replace('#', '')
+        
+        return text.strip()
