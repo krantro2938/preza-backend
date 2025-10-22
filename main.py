@@ -7,6 +7,9 @@ import uuid
 import os
 from contextlib import asynccontextmanager
 
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
+
 from database import get_db, init_db
 from models import PresentationCreate, PresentationResponse, PresentationList
 from services.ai_service import AIService
@@ -21,6 +24,25 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
 
+class Settings(BaseSettings):
+    database_url: str
+    openrouter_api_key: str
+    unsplash_access_key: str
+    unsplash_application_id: str
+    unsplash_secret_key: str
+    BACKEND_CORS_ORIGINS: list[str] = []
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    def split_origins(cls, v):
+        if isinstance(v, str):
+            return [i.strip() for i in v.split(",")]
+        return v
+
+settings = Settings()
 
 app = FastAPI(
     title="AI Presentation Builder",
@@ -32,7 +54,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
