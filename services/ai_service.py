@@ -11,7 +11,7 @@ class AIService:
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY")
         self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-2.5-flash-lite"
+        self.model = "anthropic/claude-opus-4.1"
         
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY не установлен")
