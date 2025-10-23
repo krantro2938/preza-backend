@@ -55,7 +55,33 @@ class AIService:
             ]
         }}
         """
-        
+
+        presentation_schema = {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "slides": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "slide_number": {"type": "integer"},
+                                "title": {"type": "string"},
+                                "content": {"type": "string"},
+                                "layout": {"type": "string", "enum": ["title-slide", "title-content"]},
+                                "image_query": {"type": "string"}
+                            },
+                            "required": ["slide_number", "title", "content", "layout", "image_query"],
+                            "additionalProperties": False
+                        },
+                        "minItems": slides_count,
+                        "maxItems": slides_count
+                    }
+                },
+                "required": ["title", "slides"],
+                "additionalProperties": False
+            }
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -69,7 +95,15 @@ class AIService:
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 2000
+                    # "max_tokens": 2000
+                    "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "presentation_structure",
+                        "strict": True,
+                        "schema": presentation_schema
+                    }
+                }
                 }
             )
         
