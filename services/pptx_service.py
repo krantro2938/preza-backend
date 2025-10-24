@@ -4,7 +4,8 @@ import uuid
 import asyncio
 import aiohttp
 import aiofiles
-from typing import Optional, Dict
+import random
+from typing import Optional, Dict, List
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
@@ -53,8 +54,11 @@ class PPTXService:
             ppt.slide_width = Inches(13.33)
             ppt.slide_height = Inches(7.5)
             
+            # Get layout order from presentation (fallback to None for old presentations)
+            layout_order = getattr(presentation_data, 'layout_order', None)
+            
             for slide_data in slides:
-                self._add_slide(ppt, slide_data, image_paths.get(slide_data.slide_number))
+                self._add_slide(ppt, slide_data, image_paths.get(slide_data.slide_number), layout_order)
             
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as temp_file:
@@ -146,7 +150,7 @@ class PPTXService:
             print(f"Error converting image to JPG: {e}")
             return image_path  # Return original on error
     
-    def _add_slide(self, ppt: Presentation, slide_data, image_path: Optional[str]):
+    def _add_slide(self, ppt: Presentation, slide_data, image_path: Optional[str], layout_order: Optional[List[str]] = None):
         """Add a slide to the presentation"""
         
         # Use blank slide layout
@@ -156,8 +160,8 @@ class PPTXService:
         if slide_data.layout == 'title-slide':
             self._create_title_slide(slide, slide_data)
         else:
-            # Add variety to slides based on slide number
-            slide_style = self._get_slide_style(slide_data.slide_number)
+            # Add variety to slides based on slide number and layout order
+            slide_style = self._get_slide_style(slide_data.slide_number, layout_order)
             self._create_content_slide(slide, slide_data, image_path, slide_style)
     
     def _create_title_slide(self, slide, slide_data):
@@ -203,7 +207,7 @@ class PPTXService:
             content_font.size = Pt(20)
             content_font.color.rgb = RGBColor(255, 255, 255)
     
-    def _get_slide_style(self, slide_number: int) -> dict:
+    def _get_slide_style(self, slide_number: int, layout_order: Optional[List[str]] = None) -> dict:
         """Get style variations for different slides to avoid monotony"""
         styles = [
             {
@@ -249,7 +253,22 @@ class PPTXService:
                 "text_alignment": "left"
             }
         ]
-        return styles[(slide_number - 1) % len(styles)]
+        
+        # For content slides (not title), adjust index to match frontend
+        # Slide 1 is title (not using this method), slide 2+ are content
+        # So slide 2 should use index 0, slide 3 should use index 1, etc.
+        content_slide_index = slide_number - 2  # -2 because slide 1 is title
+        
+        # If layout_order provided, use it; otherwise use sequential
+        if layout_order and content_slide_index >= 0:
+            layout_name = layout_order[content_slide_index % len(layout_order)]
+            # Find the matching style
+            for style in styles:
+                if style["layout"] == layout_name:
+                    return style
+        
+        # Fallback for old presentations or edge cases
+        return styles[max(0, content_slide_index) % len(styles)]
     
     def _create_content_slide(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Create a content slide with image and text using different layout styles"""

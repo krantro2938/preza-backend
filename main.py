@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
 from database import get_db, init_db
-from models import PresentationCreate, PresentationResponse, PresentationList
+from models import PresentationCreate, PresentationResponse, PresentationList, SlideUpdate, SlideResponse
 from services.ai_service import AIService
 from services.image_service import ImageService
 from services.presentation_service import PresentationService
@@ -134,6 +134,44 @@ async def delete_presentation(
     if not success:
         raise HTTPException(status_code=404, detail="Презентация не найдена")
     return {"message": "Презентация удалена"}
+
+
+@app.patch("/api/slides/{slide_id}", response_model=SlideResponse)
+async def update_slide(
+    slide_id: uuid.UUID,
+    slide_update: SlideUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновить слайд"""
+    updated_slide = await presentation_service.update_slide(
+        db=db,
+        slide_id=slide_id,
+        title=slide_update.title,
+        content=slide_update.content,
+        image_url=slide_update.image_url,
+        image_alt=slide_update.image_alt
+    )
+    
+    if not updated_slide:
+        raise HTTPException(status_code=404, detail="Слайд не найден")
+    
+    return updated_slide
+
+
+@app.patch("/api/presentations/{presentation_id}/reorder")
+async def reorder_slides(
+    presentation_id: uuid.UUID,
+    new_order: List[dict],  # [{"id": uuid, "slide_number": int}, ...]
+    db: AsyncSession = Depends(get_db)
+):
+    """Изменить порядок слайдов"""
+    try:
+        success = await presentation_service.reorder_slides(db, new_order)
+        if not success:
+            raise HTTPException(status_code=400, detail="Не удалось изменить порядок")
+        return {"message": "Порядок слайдов обновлен"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)}")
 
 
 @app.get("/api/presentations/{presentation_id}/download/pptx")

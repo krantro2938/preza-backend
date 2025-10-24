@@ -13,6 +13,7 @@ class Presentation(Base):
     topic = Column(String(500), nullable=False)
     style = Column(String(100), default="minimal")
     slides_count = Column(Integer, default=5)
+    layout_order = Column(JSON, nullable=True)  # Randomized order of slide layouts
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

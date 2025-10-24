@@ -3,6 +3,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Optional, Any
 import uuid
+import random
 
 from database_models import Presentation, Slide
 from models import PresentationResponse, PresentationList, SlideResponse
@@ -21,11 +22,17 @@ class PresentationService:
     ) -> PresentationResponse:
         """Создание новой презентации в базе данных"""
         
+        # Generate randomized layout order for variety
+        layout_types = ["image_left", "image_right", "text_only", "split_content", "image_top", "grid_layout"]
+        layout_order = layout_types.copy()
+        random.shuffle(layout_order)
+        
         # Создаем презентацию
         presentation = Presentation(
             topic=topic,
             slides_count=slides_count,
-            style=style
+            style=style,
+            layout_order=layout_order
         )
         
         db.add(presentation)
@@ -146,3 +153,26 @@ class PresentationService:
         await db.refresh(slide)
         
         return SlideResponse.model_validate(slide)
+    
+    async def reorder_slides(self, db: AsyncSession, new_order: List[Dict]) -> bool:
+        """Изменение порядка слайдов"""
+        try:
+            # Update each slide's slide_number
+            for item in new_order:
+                slide_id = item['id']
+                new_slide_number = item['slide_number']
+                
+                result = await db.execute(
+                    select(Slide).where(Slide.id == slide_id)
+                )
+                slide = result.scalar_one_or_none()
+                
+                if slide:
+                    slide.slide_number = new_slide_number
+            
+            await db.commit()
+            return True
+        except Exception as e:
+            await db.rollback()
+            print(f"Error reordering slides: {e}")
+            return False

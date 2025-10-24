@@ -13,6 +13,13 @@ class SlideCreate(BaseModel):
     layout: str = "title-content"
 
 
+class SlideUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    image_url: Optional[str] = None
+    image_alt: Optional[str] = None
+
+
 class SlideResponse(BaseModel):
     id: uuid.UUID
     slide_number: int
@@ -37,6 +44,7 @@ class PresentationResponse(BaseModel):
     topic: str
     style: str
     slides_count: int
+    layout_order: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
     slides: List[SlideResponse]
