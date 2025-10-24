@@ -728,12 +728,47 @@ class PPTXService:
         """Image on top, text below layout"""
         
         if image_path and os.path.exists(image_path):
-            # Image at top - full width to match web UI
+            # Image at top - full width with cover behavior to match web UI
             try:
-                slide.shapes.add_picture(
+                # Get image dimensions
+                from PIL import Image as PILImage
+                with PILImage.open(image_path) as img:
+                    img_width, img_height = img.size
+                    img_aspect = img_width / img_height
+                
+                # Target area dimensions
+                target_width = 13.33  # inches
+                target_height = 3.2   # inches
+                target_aspect = target_width / target_height
+                
+                # Add picture to slide
+                pic = slide.shapes.add_picture(
                     image_path, 
-                    Inches(0), Inches(0), Inches(13.33), Inches(3.2)
+                    Inches(0), Inches(0), Inches(target_width), Inches(target_height)
                 )
+                
+                # Apply cropping to achieve cover behavior
+                # Crop percentages are in ratio (0.0 to 1.0 represents 0% to 100%)
+                if img_aspect > target_aspect:
+                    # Image is wider - need to crop left and right
+                    # Calculate how much wider the image is
+                    scale_factor = target_height / (img_height / 96)  # 96 DPI assumption
+                    scaled_width = (img_width / 96) * scale_factor
+                    crop_total = (scaled_width - target_width) / scaled_width
+                    
+                    # Crop equally from left and right
+                    pic.crop_left = crop_total / 2
+                    pic.crop_right = crop_total / 2
+                else:
+                    # Image is taller - need to crop top and bottom
+                    scale_factor = target_width / (img_width / 96)  # 96 DPI assumption
+                    scaled_height = (img_height / 96) * scale_factor
+                    crop_total = (scaled_height - target_height) / scaled_height
+                    
+                    # Crop equally from top and bottom
+                    pic.crop_top = crop_total / 2
+                    pic.crop_bottom = crop_total / 2
+                    
             except Exception as e:
                 print(f"Error adding image to slide: {e}")
             
