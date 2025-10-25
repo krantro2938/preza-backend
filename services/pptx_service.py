@@ -20,8 +20,48 @@ from database_models import Presentation as PresentationModel
 
 class PPTXService:
     
+    # Theme color mappings matching frontend
+    THEMES = {
+        'minimal': {
+            'title_bg': RGBColor(99, 102, 241),    # indigo-600
+            'accent': RGBColor(99, 102, 241),       # indigo-500
+            'circle1': RGBColor(99, 102, 241),      # indigo-600
+            'circle2': RGBColor(147, 51, 234),      # purple-600
+        },
+        'professional': {
+            'title_bg': RGBColor(30, 41, 59),       # slate-800
+            'accent': RGBColor(37, 99, 235),        # blue-600
+            'circle1': RGBColor(37, 99, 235),       # blue-600
+            'circle2': RGBColor(59, 130, 246),      # blue-500
+        },
+        'creative': {
+            'title_bg': RGBColor(147, 51, 234),     # purple-600
+            'accent': RGBColor(236, 72, 153),       # pink-500
+            'circle1': RGBColor(147, 51, 234),      # purple-600
+            'circle2': RGBColor(236, 72, 153),      # pink-500
+        },
+        'academic': {
+            'title_bg': RGBColor(4, 120, 87),       # emerald-700
+            'accent': RGBColor(5, 150, 105),        # emerald-600
+            'circle1': RGBColor(5, 150, 105),       # emerald-600
+            'circle2': RGBColor(16, 185, 129),      # emerald-500
+        },
+        'dark': {
+            'title_bg': RGBColor(17, 24, 39),       # gray-900
+            'content_bg': RGBColor(17, 24, 39),     # gray-900 for content slides too
+            'text_color': RGBColor(243, 244, 246),  # gray-100 for text
+            'accent': RGBColor(34, 211, 238),       # cyan-400
+            'circle1': RGBColor(34, 211, 238),      # cyan-400
+            'circle2': RGBColor(6, 182, 212),       # cyan-500
+        },
+    }
+    
     def __init__(self):
         pass
+    
+    def _get_theme_colors(self, style: str) -> dict:
+        """Get theme colors based on presentation style"""
+        return self.THEMES.get(style, self.THEMES['minimal'])
     
     async def export_to_pptx(self, db: AsyncSession, presentation_id: uuid.UUID) -> str:
         """Export presentation to PPTX and return file path"""
@@ -58,7 +98,7 @@ class PPTXService:
             layout_order = getattr(presentation_data, 'layout_order', None)
             
             for slide_data in slides:
-                self._add_slide(ppt, slide_data, image_paths.get(slide_data.slide_number), layout_order)
+                self._add_slide(ppt, slide_data, image_paths.get(slide_data.slide_number), layout_order, presentation_data.style)
             
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as temp_file:
@@ -150,7 +190,7 @@ class PPTXService:
             print(f"Error converting image to JPG: {e}")
             return image_path  # Return original on error
     
-    def _add_slide(self, ppt: Presentation, slide_data, image_path: Optional[str], layout_order: Optional[List[str]] = None):
+    def _add_slide(self, ppt: Presentation, slide_data, image_path: Optional[str], layout_order: Optional[List[str]] = None, presentation_style: str = 'minimal'):
         """Add a slide to the presentation"""
         
         # Use blank slide layout
@@ -158,20 +198,22 @@ class PPTXService:
         slide = ppt.slides.add_slide(blank_slide_layout)
         
         if slide_data.layout == 'title-slide':
-            self._create_title_slide(slide, slide_data)
+            self._create_title_slide(slide, slide_data, presentation_style)
         else:
             # Add variety to slides based on slide number and layout order
-            slide_style = self._get_slide_style(slide_data.slide_number, layout_order)
+            slide_style = self._get_slide_style(slide_data.slide_number, layout_order, presentation_style)
             self._create_content_slide(slide, slide_data, image_path, slide_style)
     
-    def _create_title_slide(self, slide, slide_data):
+    def _create_title_slide(self, slide, slide_data, presentation_style: str = 'minimal'):
         """Create a title slide with gradient background"""
         
-        # Set background to gradient (simplified - solid color)
+        theme_colors = self._get_theme_colors(presentation_style)
+        
+        # Set background to theme color
         background = slide.background
         fill = background.fill
         fill.solid()
-        fill.fore_color.rgb = RGBColor(99, 102, 241)  # Primary blue
+        fill.fore_color.rgb = theme_colors['title_bg']
         
         # Add title
         title_box = slide.shapes.add_textbox(
@@ -207,50 +249,65 @@ class PPTXService:
             content_font.size = Pt(20)
             content_font.color.rgb = RGBColor(255, 255, 255)
     
-    def _get_slide_style(self, slide_number: int, layout_order: Optional[List[str]] = None) -> dict:
+    def _get_slide_style(self, slide_number: int, layout_order: Optional[List[str]] = None, presentation_style: str = 'minimal') -> dict:
         """Get style variations for different slides to avoid monotony"""
+        
+        theme_colors = self._get_theme_colors(presentation_style)
+        
+        # Common theme properties for all slides
+        common_props = {
+            "content_bg": theme_colors.get('content_bg', RGBColor(255, 255, 255)),
+            "text_color": theme_colors.get('text_color', RGBColor(17, 24, 39)),
+        }
+        
         styles = [
             {
                 "layout": "image_left",
                 "bullet_type": "numbers",
-                "accent_color": RGBColor(99, 102, 241),   # Primary blue
-                "circle_colors": [RGBColor(99, 102, 241), RGBColor(147, 51, 234)],  # Blue & Purple
-                "text_alignment": "left"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "left",
+                **common_props
             },
             {
                 "layout": "image_right", 
                 "bullet_type": "dots", 
-                "accent_color": RGBColor(147, 51, 234),  # Purple
-                "circle_colors": [RGBColor(147, 51, 234), RGBColor(59, 130, 246)],  # Purple & Light blue
-                "text_alignment": "left"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "left",
+                **common_props
             },
             {
                 "layout": "text_only",
                 "bullet_type": "numbers",
-                "accent_color": RGBColor(59, 130, 246),  # Light blue
-                "circle_colors": [RGBColor(59, 130, 246), RGBColor(16, 185, 129)],  # Light blue & Green
-                "text_alignment": "center"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "center",
+                **common_props
             },
             {
                 "layout": "split_content",
                 "bullet_type": "dots",
-                "accent_color": RGBColor(16, 185, 129),  # Green
-                "circle_colors": [RGBColor(16, 185, 129), RGBColor(245, 158, 11)],  # Green & Orange
-                "text_alignment": "left"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "left",
+                **common_props
             },
             {
                 "layout": "image_top",
                 "bullet_type": "numbers", 
-                "accent_color": RGBColor(245, 158, 11),  # Orange
-                "circle_colors": [RGBColor(245, 158, 11), RGBColor(239, 68, 68)],  # Orange & Red
-                "text_alignment": "center"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "center",
+                **common_props
             },
             {
                 "layout": "grid_layout",
                 "bullet_type": "dots",
-                "accent_color": RGBColor(239, 68, 68),  # Red
-                "circle_colors": [RGBColor(239, 68, 68), RGBColor(99, 102, 241)],  # Red & Blue
-                "text_alignment": "left"
+                "accent_color": theme_colors['accent'],
+                "circle_colors": [theme_colors['circle1'], theme_colors['circle2']],
+                "text_alignment": "left",
+                **common_props
             }
         ]
         
@@ -273,11 +330,13 @@ class PPTXService:
     def _create_content_slide(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Create a content slide with image and text using different layout styles"""
         
-        # Set white background
+        # Set background color based on theme
         background = slide.background
         fill = background.fill
         fill.solid()
-        fill.fore_color.rgb = RGBColor(255, 255, 255)
+        # Use theme background if available (for dark mode), otherwise white
+        bg_color = slide_style.get('content_bg', RGBColor(255, 255, 255))
+        fill.fore_color.rgb = bg_color
         
         # Route to different layout methods based on style
         layout_type = slide_style.get("layout", "image_left")
@@ -537,7 +596,7 @@ class PPTXService:
         title_font.name = 'Inter'
         title_font.size = Pt(28)  # Smaller to match web UI
         title_font.bold = True
-        title_font.color.rgb = RGBColor(17, 24, 39)
+        title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
         # Add accent line below title
         accent_line = slide.shapes.add_shape(
@@ -586,7 +645,7 @@ class PPTXService:
                     text_run.text = bullet_text
                     text_run.font.name = 'Inter'
                     text_run.font.size = Pt(13)  # Smaller to match web UI
-                    text_run.font.color.rgb = RGBColor(55, 65, 81)
+                    text_run.font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
                     
                     para.space_after = Pt(18)  # Larger spacing like web UI
                     para.alignment = PP_ALIGN.LEFT
@@ -814,7 +873,7 @@ class PPTXService:
         title_font.name = 'Inter'
         title_font.size = Pt(36)
         title_font.bold = True
-        title_font.color.rgb = RGBColor(17, 24, 39)
+        title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
         # Add accent line
         line_left = text_left if slide_style["text_alignment"] == "left" else Inches(6)
@@ -851,7 +910,7 @@ class PPTXService:
         title_font.name = 'Inter'
         title_font.size = Pt(36)
         title_font.bold = True
-        title_font.color.rgb = RGBColor(17, 24, 39)
+        title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
         # Add accent line
         accent_line = slide.shapes.add_shape(
@@ -886,7 +945,9 @@ class PPTXService:
                     1, pos_x, pos_y, box_width, box_height
                 )
                 box.fill.solid()
-                box.fill.fore_color.rgb = RGBColor(248, 250, 252)  # Very light gray
+                # Use dark gray for dark theme, light gray for others
+                box_bg = RGBColor(31, 41, 55) if slide_style.get('content_bg') == RGBColor(17, 24, 39) else RGBColor(248, 250, 252)
+                box.fill.fore_color.rgb = box_bg
                 box.line.color.rgb = slide_style["accent_color"]
                 box.line.width = Pt(2)
                 
@@ -941,7 +1002,7 @@ class PPTXService:
                 font = para.font
                 font.name = 'Inter'
                 font.size = Pt(16)
-                font.color.rgb = RGBColor(55, 65, 81)
+                font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
     
     def _add_slide_content(self, slide, slide_data, slide_style: dict, text_left, text_width):
         """Add title, accent line, and content to slide"""
@@ -966,7 +1027,7 @@ class PPTXService:
         title_font.name = 'Inter'
         title_font.size = Pt(36)
         title_font.bold = True
-        title_font.color.rgb = RGBColor(17, 24, 39)  # Gray 900
+        title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
         # Add accent line (always present, matching web UI)
         line_left = text_left if slide_style["text_alignment"] == "left" else text_left + (text_width / 2) - Inches(0.6)
@@ -1042,7 +1103,7 @@ class PPTXService:
                 text_run.text = line.strip()[1:].strip()
                 text_run.font.name = 'Inter'
                 text_run.font.size = Pt(18)  # text-lg in web UI
-                text_run.font.color.rgb = RGBColor(55, 65, 81)  # Gray 700
+                text_run.font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
                 
                 # Set paragraph alignment
                 para.alignment = PP_ALIGN.LEFT
@@ -1060,7 +1121,7 @@ class PPTXService:
                 font = para.font
                 font.name = 'Inter'
                 font.size = Pt(18)  # text-lg to match web UI
-                font.color.rgb = RGBColor(55, 65, 81)  # Gray 700
+                font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
     
     def _clean_markdown(self, text: str) -> str:
         """Clean markdown formatting for PPTX"""
