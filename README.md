@@ -9,7 +9,7 @@
 ## 📸 Скриншоты/Демонстрация
 
 - Пример PPTX (скриншоты):
-  - ![Image Left](docs/screenshots/pptx_image_left.png)![alt text](image.png)
+  - ![Image Left](docs/screenshots/pptx_image_left.png)
   - ![Split Content](docs/screenshots/pptx_split.png)
 
 ---
