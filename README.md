@@ -1,17 +1,15 @@
-# AI Presentation Builder - Backend
+# Серверная часть AI Presentation Builder
 
-**FastAPI-based REST API for AI-powered presentation generation**
+**REST API на основе FastAPI для создания презентаций с использованием искусственного интеллекта**
 
-A high-performance async backend service that leverages OpenAI for content generation, Unsplash for images, and python-pptx for PowerPoint export. Built with modern Python async patterns and PostgreSQL database.
+Высокопроизводительный асинхронный серверный сервис, использующий Claude для создания контента, Unsplash для изображений и python-pptx для экспорта в PowerPoint. Построен с использованием современных асинхронных шаблонов Python и базы данных PostgreSQL.
 
 ---
 
 ## 📸 Скриншоты/Демонстрация
 
-- Swagger UI: `http://localhost:8000/docs`
 - Пример PPTX (скриншоты):
-  - ![Image Left](docs/screenshots/pptx_image_left.png)
-  - ![Image Right](docs/screenshots/pptx_image_right.png)
+  - ![Image Left](docs/screenshots/pptx_image_left.png)![alt text](image.png)
   - ![Split Content](docs/screenshots/pptx_split.png)
 
 ---
@@ -32,7 +30,7 @@ A high-performance async backend service that leverages OpenAI for content gener
 
 - FastAPI, Uvicorn
 - SQLAlchemy 2.0 (async), PostgreSQL, AsyncPG, Alembic
-- OpenAI SDK (через OpenRouter), HTTPX, aiohttp
+- HTTPX, aiohttp
 - python-pptx, Pillow, aiofiles
 - Pydantic v2, python-dotenv
 
@@ -61,13 +59,9 @@ A high-performance async backend service that leverages OpenAI for content gener
    UNSPLASH_SECRET_KEY=your_unsplash_secret_key
    BACKEND_CORS_ORIGINS=http://localhost:5173
    ```
-3. Инициализируйте БД и миграции:
+3. Запустите сервер:
    ```bash
-   alembic upgrade head
-   ```
-4. Запустите сервер:
-   ```bash
-   uvicorn main:app --reload --port 8000
+   python run.py
    ```
 
 ---
