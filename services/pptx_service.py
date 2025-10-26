@@ -242,9 +242,9 @@ class PPTXService:
         fill.solid()
         fill.fore_color.rgb = theme_colors['title_bg']
         
-        # Add title
+        # Add title (moved higher from 2 to 1.5)
         title_box = slide.shapes.add_textbox(
-            Inches(1), Inches(2), Inches(11.33), Inches(2)
+            Inches(1), Inches(1.5), Inches(11.33), Inches(2)
         )
         title_frame = title_box.text_frame
         title_frame.word_wrap = True
@@ -262,7 +262,7 @@ class PPTXService:
         # Add content if exists
         if slide_data.content:
             content_box = slide.shapes.add_textbox(
-                Inches(2), Inches(4.5), Inches(9.33), Inches(1.5)
+                Inches(2), Inches(3.8), Inches(9.33), Inches(1.5)  # Reduced from 4.5 to 3.8
             )
             content_frame = content_box.text_frame
             content_frame.word_wrap = True
