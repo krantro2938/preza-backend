@@ -10,7 +10,7 @@ class Presentation(Base):
     __tablename__ = "presentations"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    topic = Column(String(500), nullable=False)
+    topic = Column(Text, nullable=False)
     style = Column(String(100), default="minimal")
     slides_count = Column(Integer, default=5)
     layout_order = Column(JSON, nullable=True)  # Randomized order of slide layouts

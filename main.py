@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import uuid
 import os
+import aiohttp
 from contextlib import asynccontextmanager
 
 from pydantic_settings import BaseSettings
@@ -206,6 +207,40 @@ async def download_presentation_pptx(
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка экспорта: {str(e)}")
+
+
+@app.get("/api/proxy/image")
+async def proxy_image(url: str):
+    """Proxy images from Unsplash (or other sources) to bypass geolocation restrictions"""
+    try:
+        # Validate that URL is from a trusted source (Unsplash)
+        if not url.startswith('https://images.unsplash.com'):
+            raise HTTPException(status_code=400, detail="Only Unsplash images are supported")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    raise HTTPException(status_code=response.status, detail="Failed to fetch image")
+                
+                # Get content type
+                content_type = response.headers.get('Content-Type', 'image/jpeg')
+                
+                # Stream the image data
+                image_data = await response.read()
+                
+                return StreamingResponse(
+                    iter([image_data]),
+                    media_type=content_type,
+                    headers={
+                        'Cache-Control': 'public, max-age=31536000',  # Cache for 1 year
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                )
+                
+    except aiohttp.ClientError as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching image: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error proxying image: {str(e)}")
 
 
 if __name__ == "__main__":
