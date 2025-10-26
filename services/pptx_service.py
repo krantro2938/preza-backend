@@ -20,6 +20,33 @@ from database_models import Presentation as PresentationModel
 
 class PPTXService:
     
+    class FilteredSlideData:
+        """Wrapper for slide data with filtered content"""
+        def __init__(self, title, content, image_url, image_alt, layout):
+            self.title = title
+            self.content = content
+            self.image_url = image_url
+            self.image_alt = image_alt
+            self.layout = layout
+    
+    @staticmethod
+    def _filter_content_for_layout(content: str, layout_type: str) -> str:
+        """Filter content based on layout type - remove non-bullet lines for certain layouts"""
+        if not content:
+            return content
+        
+        # Layouts that should only show bullet points (no key insights)
+        bullet_only_layouts = ['image_left', 'image_right', 'image_top']
+        
+        if layout_type in bullet_only_layouts:
+            # Keep only lines that start with bullet points
+            lines = content.split('\n')
+            bullet_lines = [line for line in lines if line.strip().startswith('-')]
+            return '\n'.join(bullet_lines)
+        
+        # For other layouts, return all content
+        return content
+    
     # Theme color mappings matching frontend
     THEMES = {
         'minimal': {
@@ -360,13 +387,22 @@ class PPTXService:
     def _create_image_left_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Original layout - image on left, text on right"""
         
+        # Filter content to show only bullet points
+        filtered_slide_data = self.FilteredSlideData(
+            title=slide_data.title,
+            content=self._filter_content_for_layout(slide_data.content, 'image_left'),
+            image_url=slide_data.image_url,
+            image_alt=slide_data.image_alt,
+            layout=slide_data.layout
+        )
+        
         if image_path and os.path.exists(image_path):
             # Add image on the left with styling to match web UI
             try:
                 # Add white background container (mimicking the web UI design)
                 bg_container = slide.shapes.add_shape(
                     1,  # Rectangle shape
-                    Inches(0.4), Inches(1.4), Inches(6.2), Inches(4.2)  # Reduced padding
+                    Inches(0.4), Inches(1.4), Inches(5.5), Inches(4.2)  # Reduced width from 6.2 to 5.5
                 )
                 bg_container.fill.solid()
                 bg_container.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
@@ -419,7 +455,7 @@ class PPTXService:
                     image_path, 
                     Inches(0.55),  # left (with smaller padding)
                     Inches(1.55),  # top (with smaller padding) 
-                    Inches(5.9),   # width (accounting for smaller padding)
+                    Inches(5.2),   # width reduced from 5.9 to 5.2
                     Inches(3.9)    # height (accounting for smaller padding)
                 )
                 
@@ -445,7 +481,7 @@ class PPTXService:
                 # Top-right circle (primary color) - positioned closer to rounded corner
                 circle1 = slide.shapes.add_shape(
                     9,  # Oval shape
-                    Inches(6.35), Inches(1.35), Inches(0.25), Inches(0.25)  # Closer to rounded corner
+                    Inches(5.65), Inches(1.35), Inches(0.25), Inches(0.25)  # Adjusted for smaller image
                 )
                 circle1.fill.solid()
                 circle1.fill.fore_color.rgb = slide_style["circle_colors"][0]
@@ -463,18 +499,27 @@ class PPTXService:
                 print(f"Error adding image to slide: {e}")
                 
             # Text on the right with more gap
-            text_left = Inches(7.5)  # Increased gap from image
-            text_width = Inches(5.33)  # Adjusted width accordingly
+            text_left = Inches(6.7)  # Adjusted for smaller image (reduced from 7.5)
+            text_width = Inches(6.1)  # Increased width (from 5.33)
         else:
             # Full width text if no image
             text_left = Inches(1)
             text_width = Inches(11.33)
         
         # Add content for image_left layout
-        self._add_slide_content(slide, slide_data, slide_style, text_left, text_width)
+        self._add_slide_content(slide, filtered_slide_data, slide_style, text_left, text_width)
     
     def _create_image_right_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Image on right, text on left layout"""
+        
+        # Filter content to show only bullet points
+        filtered_slide_data = self.FilteredSlideData(
+            title=slide_data.title,
+            content=self._filter_content_for_layout(slide_data.content, 'image_right'),
+            image_url=slide_data.image_url,
+            image_alt=slide_data.image_alt,
+            layout=slide_data.layout
+        )
         
         if image_path and os.path.exists(image_path):
             # Image on the right side
@@ -482,7 +527,7 @@ class PPTXService:
                 # Add white background container (mimicking the web UI design)
                 bg_container = slide.shapes.add_shape(
                     1,  # Rectangle shape
-                    Inches(7), Inches(1.4), Inches(6.2), Inches(4.2)  # Right side position
+                    Inches(7.6), Inches(1.4), Inches(5.5), Inches(4.2)  # Right side position, reduced width from 6.2 to 5.5
                 )
                 bg_container.fill.solid()
                 bg_container.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
@@ -509,7 +554,7 @@ class PPTXService:
                 # Add the actual image
                 image_shape = slide.shapes.add_picture(
                     image_path, 
-                    Inches(7.15), Inches(1.55), Inches(5.9), Inches(3.9)
+                    Inches(7.75), Inches(1.55), Inches(5.2), Inches(3.9)  # Adjusted left position and reduced width from 5.9 to 5.2
                 )
                 
                 # Apply rounded corners to image
@@ -529,14 +574,14 @@ class PPTXService:
                 
                 # Add decorative circles
                 circle1 = slide.shapes.add_shape(
-                    9, Inches(12.85), Inches(1.2), Inches(0.25), Inches(0.25)
+                    9, Inches(12.65), Inches(1.35), Inches(0.25), Inches(0.25)  # Adjusted for smaller image
                 )
                 circle1.fill.solid()
                 circle1.fill.fore_color.rgb = slide_style["circle_colors"][0]
                 circle1.line.fill.background()
                 
                 circle2 = slide.shapes.add_shape(
-                    9, Inches(6.75), Inches(5.25), Inches(0.2), Inches(0.2)
+                    9, Inches(7.55), Inches(5.25), Inches(0.2), Inches(0.2)  # Adjusted for smaller image
                 )
                 circle2.fill.solid()
                 circle2.fill.fore_color.rgb = slide_style["circle_colors"][1]
@@ -547,13 +592,13 @@ class PPTXService:
             
             # Text on the left
             text_left = Inches(1)
-            text_width = Inches(5.5)
+            text_width = Inches(6.1)  # Increased from 5.5 to match smaller image
         else:
             # Full width text if no image
             text_left = Inches(1)
             text_width = Inches(11.33)
         
-        self._add_slide_content(slide, slide_data, slide_style, text_left, text_width)
+        self._add_slide_content(slide, filtered_slide_data, slide_style, text_left, text_width)
     
     def _create_text_only_layout(self, slide, slide_data, slide_style: dict):
         """Text-only layout, no images - centered content"""
@@ -805,6 +850,15 @@ class PPTXService:
     def _create_image_top_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Image on top, text below layout"""
         
+        # Filter content to show only bullet points
+        filtered_slide_data = self.FilteredSlideData(
+            title=slide_data.title,
+            content=self._filter_content_for_layout(slide_data.content, 'image_top'),
+            image_url=slide_data.image_url,
+            image_alt=slide_data.image_alt,
+            layout=slide_data.layout
+        )
+        
         if image_path and os.path.exists(image_path):
             # Image at top - full width with cover behavior to match web UI
             try:
@@ -852,7 +906,7 @@ class PPTXService:
             
             # Text below image - adjusted for larger image
             text_left = Inches(1)
-            text_top = Inches(3.8)
+            text_top = Inches(3.4)  # Reduced from 3.8 to 3.4 to prevent overflow
             text_width = Inches(11.33)
         else:
             # No image, normal text positioning
@@ -862,7 +916,7 @@ class PPTXService:
         
         # Add title
         title_box = slide.shapes.add_textbox(
-            text_left, text_top, text_width, Inches(1)
+            text_left, text_top, text_width, Inches(0.8)  # Reduced from 1 to 0.8
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -871,28 +925,28 @@ class PPTXService:
         
         title_font = title_para.font
         title_font.name = 'Inter'
-        title_font.size = Pt(36)
+        title_font.size = Pt(32)  # Reduced from 36 to 32
         title_font.bold = True
         title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
         # Add accent line
         line_left = text_left if slide_style["text_alignment"] == "left" else Inches(6)
         accent_line = slide.shapes.add_shape(
-            1, line_left, text_top + Inches(1.1), Inches(1.2), Inches(0.06)
+            1, line_left, text_top + Inches(0.9), Inches(1.2), Inches(0.06)  # Reduced from 1.1 to 0.9
         )
         accent_line.fill.solid()
         accent_line.fill.fore_color.rgb = slide_style["accent_color"]
         accent_line.line.fill.background()
         
         # Add content
-        if slide_data.content:
+        if filtered_slide_data.content:
             content_box = slide.shapes.add_textbox(
-                text_left, text_top + Inches(1.5), text_width, Inches(3)
+                text_left, text_top + Inches(1.2), text_width, Inches(3.3)  # Reduced start from 1.5 to 1.2, increased height from 3 to 3.3
             )
             content_frame = content_box.text_frame
             content_frame.word_wrap = True
             
-            self._process_bullet_content(content_frame, slide_data.content, slide_style)
+            self._process_bullet_content(content_frame, filtered_slide_data.content, slide_style)
     
     def _create_grid_layout(self, slide, slide_data, image_path: Optional[str], slide_style: dict):
         """Grid layout - content in structured boxes"""

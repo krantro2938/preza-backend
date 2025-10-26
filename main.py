@@ -206,6 +206,9 @@ async def download_presentation_pptx(
         )
             
     except Exception as e:
+        import traceback
+        print(f"PPTX Export Error: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Ошибка экспорта: {str(e)}")
 
 
