@@ -45,13 +45,13 @@ class AIService:
                     "layout": "title-slide",
                     "image_query": "business presentation professional"
                 }},
-                {
+                {{
                     "slide_number": 2,
                     "title": "Заголовок слайда",
                     "content": "- Первый пункт\n- Второй пункт\n- Третий пункт\n\nКлючевые выводы: этот раздел показывает важность комплексного подхода к решению проблем.",
                     "layout": "title-content",
                     "image_query": "запрос для изображения на английском"
-                }
+                }}
             ]
         }}
         """
