@@ -1059,14 +1059,15 @@ class PPTXService:
                 font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
     
     def _add_slide_content(self, slide, slide_data, slide_style: dict, text_left, text_width):
-        """Add title, accent line, and content to slide"""
+        """Add title, accent line, and content to slide with dynamic positioning"""
         
-        # Add title
+        # Add title with auto-fit to calculate actual height
         title_box = slide.shapes.add_textbox(
-            text_left, Inches(1), text_width, Inches(1.5)
+            text_left, Inches(1), text_width, Inches(2)  # Give enough initial height
         )
         title_frame = title_box.text_frame
         title_frame.word_wrap = True
+        title_frame.auto_size = None  # We'll manage size ourselves
         title_para = title_frame.paragraphs[0]
         title_para.text = slide_data.title
         
@@ -1083,20 +1084,44 @@ class PPTXService:
         title_font.bold = True
         title_font.color.rgb = slide_style.get('text_color', RGBColor(17, 24, 39))
         
-        # Add accent line (always present, matching web UI)
+        # Estimate title height based on text length and width
+        # For 36pt Inter Bold, average character width is roughly 0.5 * font_size for Latin
+        # Cyrillic characters tend to be slightly wider
+        # Looking at your example: ~43 chars wrapped to 2 lines in ~6 inches = ~21.5 chars/line
+        char_width_estimate = 25  # points per character (more conservative)
+        available_width_points = text_width.inches * 72  # Convert inches to points (72 pts/inch)
+        chars_per_line = int(available_width_points / char_width_estimate)
+        
+        # Calculate number of lines (accounting for word wrapping)
+        title_length = len(slide_data.title)
+        estimated_lines = max(1, (title_length + chars_per_line - 1) // chars_per_line)  # Ceiling division
+        
+        # Each line is 36pt font height + line spacing
+        # Line spacing for title is typically 1.2x font size = 43.2pt per line
+        line_height_pt = 43.2
+        title_height_pt = line_height_pt * estimated_lines
+        
+        # Add small padding (0.25 inches) after title
+        accent_line_top = Inches(1) + Pt(title_height_pt) + Inches(0.25)
+        
+        # Add accent line dynamically positioned
         line_left = text_left if slide_style["text_alignment"] == "left" else text_left + (text_width / 2) - Inches(0.6)
         accent_line = slide.shapes.add_shape(
             1,  # Rectangle shape
-            line_left, Inches(2.6), Inches(1.2), Inches(0.06)
+            line_left, accent_line_top, Inches(1.2), Inches(0.06)
         )
         accent_line.fill.solid()
         accent_line.fill.fore_color.rgb = slide_style["accent_color"]
         accent_line.line.fill.background()
         
-        # Add content with proper bullet points
+        # Add content dynamically positioned (0.3 inches below accent line)
         if slide_data.content:
+            content_top = accent_line_top + Inches(0.4)
+            # Calculate remaining height for content
+            content_height = Inches(7.5) - content_top  # Slide height is 7.5 inches
+            
             content_box = slide.shapes.add_textbox(
-                text_left, Inches(3), text_width, Inches(4)
+                text_left, content_top, text_width, content_height
             )
             content_frame = content_box.text_frame
             content_frame.word_wrap = True
@@ -1164,18 +1189,23 @@ class PPTXService:
                 
                 # Set spacing between bullets to match mb-4 (16px)
                 para.space_after = Pt(16)  # Matching mb-4
-                para.space_before = Pt(0)  # No space before
+                # Add spacing only before the first bullet point
+                para.space_before = Pt(12) if bullet_count == 1 else Pt(0)
                 
                 # Adjust line spacing for better bullet alignment
                 para.line_spacing = 1.2  # Tighter line spacing
                 
             else:
-                # Non-bullet text
+                # Non-bullet text (like "Ключевые выводы")
                 para.text = self._clean_markdown(line)
                 font = para.font
                 font.name = 'Inter'
                 font.size = Pt(18)  # text-lg to match web UI
                 font.color.rgb = slide_style.get('text_color', RGBColor(55, 65, 81))
+                
+                # Add gap above key insights section
+                para.space_before = Pt(32)  # Add spacing above (2x bullet spacing)
+                para.alignment = PP_ALIGN.LEFT
     
     def _clean_markdown(self, text: str) -> str:
         """Clean markdown formatting for PPTX"""
